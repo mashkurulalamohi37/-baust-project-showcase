@@ -1,0 +1,1233 @@
+import 'package:flutter/material.dart';
+import '../models/project.dart';
+import '../models/user.dart';
+import '../controllers/project_service.dart';
+import '../controllers/auth_service.dart';
+import 'project_detail.dart';
+
+class TeacherDashboardScreen extends StatefulWidget {
+  const TeacherDashboardScreen({super.key});
+
+  @override
+  State<TeacherDashboardScreen> createState() => _TeacherDashboardScreenState();
+}
+
+class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
+  final ProjectService _projectService = ProjectService();
+  final AuthService _authService = AuthService();
+  int _selectedIndex = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _projectService.ensureProjectsLoaded();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Teacher Dashboard'),
+        backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
+        foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
+        actions: [
+          PopupMenuButton<String>(
+            onSelected: (String value) async {
+              if (value == 'logout') {
+                await _authService.logout();
+                if (mounted) {
+                  Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+                }
+              }
+            },
+            itemBuilder: (BuildContext context) => [
+              PopupMenuItem<String>(
+                value: 'profile',
+                child: Row(
+                  children: [
+                    const Icon(Icons.person),
+                    const SizedBox(width: 8),
+                    Text(_authService.currentUser?.name ?? 'Teacher'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem<String>(
+                value: 'logout',
+                child: Row(
+                  children: [
+                    Icon(Icons.logout),
+                    SizedBox(width: 8),
+                    Text('Logout'),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+      body: AnimatedBuilder(
+        animation: _projectService,
+        builder: (context, child) {
+          if (_projectService.isLoading) {
+            return const Center(child: CircularProgressIndicator());
+          }
+
+          return IndexedStack(
+            index: _selectedIndex,
+            children: [
+              _ReviewTab(projectService: _projectService, authService: _authService),
+              _AllProjectsTab(projectService: _projectService, authService: _authService),
+              _MyReviewsTab(projectService: _projectService, authService: _authService),
+              _AnalyticsTab(projectService: _projectService, authService: _authService),
+            ],
+          );
+        },
+      ),
+      bottomNavigationBar: NavigationBar(
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
+        destinations: const [
+          NavigationDestination(
+            icon: Icon(Icons.rate_review_outlined),
+            selectedIcon: Icon(Icons.rate_review),
+            label: 'Review',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.folder_outlined),
+            selectedIcon: Icon(Icons.folder),
+            label: 'All Projects',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.comment_outlined),
+            selectedIcon: Icon(Icons.comment),
+            label: 'My Reviews',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.analytics_outlined),
+            selectedIcon: Icon(Icons.analytics),
+            label: 'Analytics',
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReviewTab extends StatefulWidget {
+  const _ReviewTab({required this.projectService, required this.authService});
+  final ProjectService projectService;
+  final AuthService authService;
+
+  @override
+  State<_ReviewTab> createState() => _ReviewTabState();
+}
+
+class _ReviewTabState extends State<_ReviewTab> {
+  @override
+  void initState() {
+    super.initState();
+    // Listen to project service changes
+    widget.projectService.addListener(_onProjectServiceChanged);
+  }
+
+  @override
+  void dispose() {
+    widget.projectService.removeListener(_onProjectServiceChanged);
+    super.dispose();
+  }
+
+  void _onProjectServiceChanged() {
+    if (mounted) {
+      setState(() {});
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final pendingProjects = widget.projectService.filterProjectsByStatus(ProjectStatus.pending);
+    final approvedProjects = widget.projectService.filterProjectsByStatus(ProjectStatus.approved);
+    
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Header
+        Card(
+          color: Theme.of(context).colorScheme.secondaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.rate_review,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.onSecondaryContainer,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Review & Rate Projects',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSecondaryContainer,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Help students improve by providing constructive feedback',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSecondaryContainer.withOpacity(0.8),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Statistics Cards
+        Row(
+          children: [
+            Expanded(
+              child: _StatCard(
+                icon: Icons.pending_actions,
+                label: 'Pending Review',
+                value: pendingProjects.length.toString(),
+                color: Colors.orange,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _StatCard(
+                icon: Icons.check_circle,
+                label: 'Reviewed',
+                value: approvedProjects.length.toString(),
+                color: Colors.green,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // Pending Reviews
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Pending Reviews',
+              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            IconButton(
+              onPressed: () async {
+                await widget.projectService.ensureProjectsLoaded();
+              },
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Refresh Projects',
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        if (pendingProjects.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.check_circle_outline, size: 48, color: Colors.grey),
+                    SizedBox(height: 8),
+                    Text('No pending reviews'),
+                    SizedBox(height: 4),
+                    Text('All projects have been reviewed'),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          ...pendingProjects.take(5).map((project) => _ProjectReviewCard(
+            project: project,
+            projectService: widget.projectService,
+            authService: widget.authService,
+            onTap: () => _openProjectDetail(context, project),
+          )),
+
+        const SizedBox(height: 24),
+
+        // Recently Reviewed
+        Text(
+          'Recently Reviewed',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (approvedProjects.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.rate_review, size: 48, color: Colors.grey),
+                    SizedBox(height: 8),
+                    Text('No reviews yet'),
+                    SizedBox(height: 4),
+                    Text('Start reviewing projects to see them here'),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          ...approvedProjects.take(3).map((project) => _ProjectReviewCard(
+            project: project,
+            projectService: widget.projectService,
+            authService: widget.authService,
+            onTap: () => _openProjectDetail(context, project),
+            showReviewActions: false,
+          )),
+      ],
+    );
+  }
+
+  void _openProjectDetail(BuildContext context, Project project) {
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProjectDetailScreen(
+          project: project,
+          projectService: widget.projectService,
+          authService: widget.authService,
+        ),
+      ),
+    );
+  }
+}
+
+class _AllProjectsTab extends StatelessWidget {
+  const _AllProjectsTab({required this.projectService, required this.authService});
+  final ProjectService projectService;
+  final AuthService authService;
+
+  @override
+  Widget build(BuildContext context) {
+    final allProjects = List<Project>.from(projectService.projects)
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Header
+        Card(
+          color: Theme.of(context).colorScheme.primaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.folder,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'All Student Projects',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${allProjects.length} project${allProjects.length == 1 ? '' : 's'} available for review',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Filter Chips
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              FilterChip(
+                label: const Text('All'),
+                selected: true,
+                onSelected: (bool selected) {},
+              ),
+              const SizedBox(width: 8),
+              FilterChip(
+                label: const Text('Pending'),
+                selected: false,
+                onSelected: (bool selected) {},
+              ),
+              const SizedBox(width: 8),
+              FilterChip(
+                label: const Text('Approved'),
+                selected: false,
+                onSelected: (bool selected) {},
+              ),
+              const SizedBox(width: 8),
+              FilterChip(
+                label: const Text('Featured'),
+                selected: false,
+                onSelected: (bool selected) {},
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Projects List
+        if (allProjects.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.folder_open, size: 48, color: Colors.grey),
+                    SizedBox(height: 8),
+                    Text('No projects available'),
+                    SizedBox(height: 4),
+                    Text('Students haven\'t uploaded any projects yet'),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          ...allProjects.map((project) => _ProjectReviewCard(
+                project: project,
+                projectService: projectService,
+                authService: authService,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute<void>(
+                    builder: (_) => ProjectDetailScreen(
+                      project: project,
+                      projectService: projectService,
+                      authService: authService,
+                    ),
+                  ),
+                ),
+              )),
+      ],
+    );
+  }
+}
+
+class _MyReviewsTab extends StatelessWidget {
+  const _MyReviewsTab({required this.projectService, required this.authService});
+  final ProjectService projectService;
+  final AuthService authService;
+
+  @override
+  Widget build(BuildContext context) {
+    final user = authService.currentUser;
+    if (user == null) return const Center(child: Text('Please log in'));
+
+    final myReviews = projectService.reviews
+        .where((review) => review.reviewerId == user.id)
+        .toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Header
+        Card(
+          color: Theme.of(context).colorScheme.tertiaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.comment,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.onTertiaryContainer,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'My Reviews',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onTertiaryContainer,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${myReviews.length} review${myReviews.length == 1 ? '' : 's'} written',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onTertiaryContainer.withOpacity(0.8),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Reviews List
+        if (myReviews.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.comment_outlined, size: 48, color: Colors.grey),
+                    SizedBox(height: 8),
+                    Text('No reviews written yet'),
+                    SizedBox(height: 4),
+                    Text('Start reviewing projects to see them here'),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          ...myReviews.map((review) {
+            final project = projectService.projects.firstWhere(
+              (p) => p.id == review.projectId,
+              orElse: () => Project(
+                id: '',
+                title: 'Project not found',
+                abstract: '',
+                authorId: '',
+                authorName: 'Unknown',
+                category: ProjectCategory.other,
+                year: DateTime.now().year,
+                createdAt: DateTime.now(),
+                updatedAt: DateTime.now(),
+                status: ProjectStatus.draft,
+              ),
+            );
+            return _ReviewCard(
+              review: review,
+              project: project,
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute<void>(
+                  builder: (_) => ProjectDetailScreen(
+                    project: project,
+                    projectService: projectService,
+                    authService: authService,
+                  ),
+                ),
+              ),
+            );
+          }),
+      ],
+    );
+  }
+}
+
+class _AnalyticsTab extends StatelessWidget {
+  const _AnalyticsTab({required this.projectService, required this.authService});
+  final ProjectService projectService;
+  final AuthService authService;
+
+  @override
+  Widget build(BuildContext context) {
+    final allProjects = projectService.projects;
+    final projectsByStatus = <ProjectStatus, List<Project>>{};
+    
+    for (final status in ProjectStatus.values) {
+      projectsByStatus[status] = projectService.filterProjectsByStatus(status);
+    }
+
+    final totalReviews = projectService.reviews.length;
+    final averageRating = allProjects.isNotEmpty
+        ? allProjects.map((p) => p.rating).reduce((a, b) => a + b) / allProjects.length
+        : 0.0;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Header
+        Card(
+          color: Theme.of(context).colorScheme.primaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.analytics,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'Review Analytics',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Overview of project reviews and ratings',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Statistics Grid
+        GridView.count(
+          crossAxisCount: 2,
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          childAspectRatio: 1.5,
+          children: [
+            _AnalyticsCard(
+              icon: Icons.folder,
+              label: 'Total Projects',
+              value: allProjects.length.toString(),
+              color: Colors.blue,
+            ),
+            _AnalyticsCard(
+              icon: Icons.pending_actions,
+              label: 'Pending',
+              value: projectsByStatus[ProjectStatus.pending]?.length.toString() ?? '0',
+              color: Colors.orange,
+            ),
+            _AnalyticsCard(
+              icon: Icons.check_circle,
+              label: 'Approved',
+              value: projectsByStatus[ProjectStatus.approved]?.length.toString() ?? '0',
+              color: Colors.green,
+            ),
+            _AnalyticsCard(
+              icon: Icons.star,
+              label: 'Featured',
+              value: projectsByStatus[ProjectStatus.featured]?.length.toString() ?? '0',
+              color: Colors.purple,
+            ),
+            _AnalyticsCard(
+              icon: Icons.rate_review,
+              label: 'Total Reviews',
+              value: totalReviews.toString(),
+              color: Colors.teal,
+            ),
+            _AnalyticsCard(
+              icon: Icons.star_rate,
+              label: 'Avg Rating',
+              value: averageRating.toStringAsFixed(1),
+              color: Colors.amber,
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
+
+        // Category Distribution
+        Text(
+          'Projects by Category',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: ProjectCategory.values.map((category) {
+                final count = allProjects.where((p) => p.category == category).length;
+                final percentage = allProjects.isNotEmpty ? (count / allProjects.length * 100) : 0.0;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(category.displayName),
+                      ),
+                      Text('$count (${percentage.toStringAsFixed(1)}%)'),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _ProjectReviewCard extends StatelessWidget {
+  const _ProjectReviewCard({
+    required this.project,
+    required this.projectService,
+    required this.authService,
+    this.onTap,
+    this.showReviewActions = true,
+  });
+  final Project project;
+  final ProjectService projectService;
+  final AuthService authService;
+  final VoidCallback? onTap;
+  final bool showReviewActions;
+
+  @override
+  Widget build(BuildContext context) {
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+    
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header with title and status
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      project.title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _getStatusColor(project.status).withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: _getStatusColor(project.status).withOpacity(0.3)),
+                    ),
+                    child: Text(
+                      project.status.displayName,
+                      style: TextStyle(
+                        color: _getStatusColor(project.status),
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              
+              // Abstract
+              Text(
+                project.abstract,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: scheme.onSurface.withOpacity(0.7),
+                ),
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 12),
+              
+              // Tags and info
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  Chip(
+                    label: Text(project.category.displayName),
+                    backgroundColor: scheme.primaryContainer,
+                    labelStyle: TextStyle(color: scheme.onPrimaryContainer),
+                  ),
+                  Chip(
+                    label: Text(project.year.toString()),
+                    backgroundColor: scheme.secondaryContainer,
+                    labelStyle: TextStyle(color: scheme.onSecondaryContainer),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              
+              // Supervisor info
+              if (project.facultyName != null)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: scheme.primaryContainer.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: scheme.primaryContainer.withOpacity(0.5),
+                      width: 1,
+                    ),
+                  ),
+                  child: Text(
+                    'Supervisor: ${project.facultyName}',
+                    style: TextStyle(
+                      color: scheme.onSurface,
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              
+              // Author info
+              Text(
+                'By ${project.authorName}',
+                style: TextStyle(
+                  color: scheme.onSurface.withOpacity(0.7),
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 12),
+              
+              // Footer with rating and actions
+              Row(
+                children: [
+                  // Rating
+                  Row(
+                    children: [
+                      const Icon(Icons.star, size: 16, color: Colors.amber),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${project.rating.toStringAsFixed(1)}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '(${project.reviewCount})',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: scheme.onSurface.withOpacity(0.6),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const Spacer(),
+                  
+                  // Actions
+                  if (showReviewActions && project.status == ProjectStatus.pending) ...[
+                    TextButton.icon(
+                      onPressed: () => _approveProject(context, project),
+                      icon: const Icon(Icons.check_circle, color: Colors.green),
+                      label: const Text('Approve'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: () => _giveFeedback(context, project),
+                      icon: const Icon(Icons.feedback, color: Colors.orange),
+                      label: const Text('Feedback'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: () => _rejectProject(context, project),
+                      icon: const Icon(Icons.cancel, color: Colors.red),
+                      label: const Text('Reject'),
+                    ),
+                  ] else if (showReviewActions) ...[
+                    TextButton.icon(
+                      onPressed: () => _rateProject(context, project),
+                      icon: const Icon(Icons.star_rate, color: Colors.amber),
+                      label: const Text('Rate'),
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      onPressed: () => _commentProject(context, project),
+                      icon: const Icon(Icons.comment, color: Colors.blue),
+                      label: const Text('Comment'),
+                    ),
+                  ],
+                  
+                  Icon(
+                    Icons.chevron_right,
+                    color: scheme.primary,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _approveProject(BuildContext context, Project project) async {
+    final updatedProject = project.copyWith(status: ProjectStatus.approved);
+    final success = await projectService.updateProject(updatedProject);
+    
+    if (success && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${project.title} approved')),
+      );
+    }
+  }
+
+  void _rejectProject(BuildContext context, Project project) async {
+    final updatedProject = project.copyWith(status: ProjectStatus.rejected);
+    final success = await projectService.updateProject(updatedProject);
+    
+    if (success && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${project.title} rejected')),
+      );
+    }
+  }
+
+  void _giveFeedback(BuildContext context, Project project) {
+    showDialog(
+      context: context,
+      builder: (context) => _FeedbackDialog(
+        project: project,
+        projectService: projectService,
+        authService: authService,
+      ),
+    );
+  }
+
+  void _rateProject(BuildContext context, Project project) {
+    // Navigate to project detail for rating
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProjectDetailScreen(
+          project: project,
+          projectService: projectService,
+          authService: authService,
+        ),
+      ),
+    );
+  }
+
+  void _commentProject(BuildContext context, Project project) {
+    // Navigate to project detail for commenting
+    Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => ProjectDetailScreen(
+          project: project,
+          projectService: projectService,
+          authService: authService,
+        ),
+      ),
+    );
+  }
+
+  Color _getStatusColor(ProjectStatus status) {
+    switch (status) {
+      case ProjectStatus.draft:
+        return Colors.grey;
+      case ProjectStatus.pending:
+        return Colors.orange;
+      case ProjectStatus.approved:
+        return Colors.green;
+      case ProjectStatus.rejected:
+        return Colors.red;
+      case ProjectStatus.featured:
+        return Colors.purple;
+      case ProjectStatus.needsRevision:
+        return Colors.amber;
+      case ProjectStatus.resubmitted:
+        return Colors.blue;
+    }
+  }
+}
+
+class _ReviewCard extends StatelessWidget {
+  const _ReviewCard({
+    required this.review,
+    required this.project,
+    this.onTap,
+  });
+  final dynamic review; // Assuming Review model exists
+  final Project project;
+  final VoidCallback? onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      project.title,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  Row(
+                    children: List.generate(5, (index) {
+                      return Icon(
+                        index < (review.rating ?? 0) ? Icons.star : Icons.star_border,
+                        size: 16,
+                        color: Colors.amber,
+                      );
+                    }),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                review.comment ?? 'No comment provided',
+                style: Theme.of(context).textTheme.bodyMedium,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'Reviewed on ${review.createdAt.day}/${review.createdAt.month}/${review.createdAt.year}',
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _StatCard extends StatelessWidget {
+  const _StatCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _AnalyticsCard extends StatelessWidget {
+  const _AnalyticsCard({
+    required this.icon,
+    required this.label,
+    required this.value,
+    required this.color,
+  });
+  final IconData icon;
+  final String label;
+  final String value;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      margin: const EdgeInsets.all(4),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(icon, color: color, size: 24),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+              fontWeight: FontWeight.bold,
+              color: color,
+            ),
+          ),
+          Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FeedbackDialog extends StatefulWidget {
+  const _FeedbackDialog({
+    required this.project,
+    required this.projectService,
+    required this.authService,
+  });
+
+  final Project project;
+  final ProjectService projectService;
+  final AuthService authService;
+
+  @override
+  State<_FeedbackDialog> createState() => _FeedbackDialogState();
+}
+
+class _FeedbackDialogState extends State<_FeedbackDialog> {
+  final _commentController = TextEditingController();
+  FeedbackType _selectedType = FeedbackType.general;
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _commentController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Give Feedback - ${widget.project.title}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Feedback Type',
+              style: Theme.of(context).textTheme.titleSmall,
+            ),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              children: FeedbackType.values.map((type) {
+                return ChoiceChip(
+                  label: Text('${type.icon} ${type.displayName}'),
+                  selected: _selectedType == type,
+                  onSelected: (selected) {
+                    if (selected) {
+                      setState(() => _selectedType = type);
+                    }
+                  },
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
+            TextField(
+              controller: _commentController,
+              maxLines: 4,
+              decoration: const InputDecoration(
+                labelText: 'Feedback Comment',
+                hintText: 'Provide detailed feedback for the student...',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: _isSubmitting ? null : _submitFeedback,
+          child: _isSubmitting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Submit Feedback'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _submitFeedback() async {
+    if (_commentController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter feedback comment')),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    final user = widget.authService.currentUser;
+    if (user == null) return;
+
+    final feedback = ProjectFeedback(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      projectId: widget.project.id,
+      reviewerId: user.id,
+      reviewerName: user.name,
+      comment: _commentController.text.trim(),
+      type: _selectedType,
+      createdAt: DateTime.now(),
+    );
+
+    final success = await widget.projectService.addFeedback(feedback);
+    
+    if (success && mounted) {
+      // Update project status to needs revision
+      final updatedProject = widget.project.copyWith(
+        status: ProjectStatus.needsRevision,
+      );
+      await widget.projectService.updateProject(updatedProject);
+      
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Feedback submitted successfully'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to submit feedback'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+
+    setState(() => _isSubmitting = false);
+  }
+}
