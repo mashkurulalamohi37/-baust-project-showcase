@@ -352,6 +352,7 @@ class FirestoreService {
     final query = await _firestore
         .collection(_reviewsCollection)
         .where('projectId', isEqualTo: projectId)
+        .orderBy('createdAt', descending: true)
         .get();
     
     return query.docs.map((doc) {
@@ -361,11 +362,148 @@ class FirestoreService {
         projectId: data['projectId'],
         reviewerId: data['reviewerId'],
         reviewerName: data['reviewerName'],
-        rating: (data['rating'] ?? 0.0).toDouble(),
+        rating: data['rating'],
         comment: data['comment'],
         createdAt: DateTime.parse(data['createdAt']),
       );
     }).toList();
+  }
+
+  static Future<void> deleteReview(String reviewId) async {
+    await _firestore.collection(_reviewsCollection).doc(reviewId).delete();
+  }
+
+  static Future<List<Review>> getAllReviews() async {
+    final query = await _firestore
+        .collection(_reviewsCollection)
+        .orderBy('createdAt', descending: true)
+        .get();
+    
+    return query.docs.map((doc) {
+      final data = doc.data();
+      return Review(
+        id: data['id'],
+        projectId: data['projectId'],
+        reviewerId: data['reviewerId'],
+        reviewerName: data['reviewerName'],
+        rating: data['rating'],
+        comment: data['comment'],
+        createdAt: DateTime.parse(data['createdAt']),
+      );
+    }).toList();
+  }
+
+  // Bookmark operations
+  static Future<void> saveBookmark(String userId, String projectId) async {
+    await _firestore
+        .collection('bookmarks')
+        .doc('${userId}_$projectId')
+        .set({
+      'userId': userId,
+      'projectId': projectId,
+      'createdAt': DateTime.now().toIso8601String(),
+    });
+  }
+
+  static Future<void> removeBookmark(String userId, String projectId) async {
+    await _firestore
+        .collection('bookmarks')
+        .doc('${userId}_$projectId')
+        .delete();
+  }
+
+  static Future<bool> isBookmarked(String userId, String projectId) async {
+    final doc = await _firestore
+        .collection('bookmarks')
+        .doc('${userId}_$projectId')
+        .get();
+    return doc.exists;
+  }
+
+  static Future<List<String>> getUserBookmarks(String userId) async {
+    final query = await _firestore
+        .collection('bookmarks')
+        .where('userId', isEqualTo: userId)
+        .get();
+    
+    return query.docs.map((doc) => doc.data()['projectId'] as String).toList();
+  }
+
+  // Feedback operations
+  static Future<void> saveFeedback(ProjectFeedback feedback) async {
+    await _firestore.collection('feedback').doc(feedback.id).set({
+      'id': feedback.id,
+      'projectId': feedback.projectId,
+      'reviewerId': feedback.reviewerId,
+      'reviewerName': feedback.reviewerName,
+      'comment': feedback.comment,
+      'type': feedback.type.name,
+      'createdAt': feedback.createdAt.toIso8601String(),
+    });
+  }
+
+  static Future<void> deleteFeedback(String feedbackId) async {
+    await _firestore.collection('feedback').doc(feedbackId).delete();
+  }
+
+  static Future<List<ProjectFeedback>> getFeedbackForProject(String projectId) async {
+    final query = await _firestore
+        .collection('feedback')
+        .where('projectId', isEqualTo: projectId)
+        .orderBy('createdAt', descending: true)
+        .get();
+    
+    return query.docs.map((doc) {
+      final data = doc.data();
+      return ProjectFeedback(
+        id: data['id'],
+        projectId: data['projectId'],
+        reviewerId: data['reviewerId'],
+        reviewerName: data['reviewerName'],
+        comment: data['comment'],
+        type: FeedbackType.values.firstWhere((e) => e.name == data['type']),
+        createdAt: DateTime.parse(data['createdAt']),
+      );
+    }).toList();
+  }
+
+  // Notification operations
+  static Future<void> saveNotification(Notification notification) async {
+    await _firestore.collection('notifications').doc(notification.id).set(notification.toMap());
+  }
+
+  static Future<List<Notification>> getUserNotifications(String userId) async {
+    final query = await _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .orderBy('createdAt', descending: true)
+        .limit(50)
+        .get();
+    
+    return query.docs.map((doc) => Notification.fromMap(doc.data())).toList();
+  }
+
+  static Future<void> markNotificationAsRead(String notificationId) async {
+    await _firestore.collection('notifications').doc(notificationId).update({'isRead': true});
+  }
+
+  static Future<void> markAllNotificationsAsRead(String userId) async {
+    final batch = _firestore.batch();
+    final notifications = await _firestore
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .where('isRead', isEqualTo: false)
+        .get();
+    
+    for (final doc in notifications.docs) {
+      batch.update(doc.reference, {'isRead': true});
+    }
+    
+    await batch.commit();
+  }
+
+  static Future<void> deleteNotification(String notificationId) async {
+    await _firestore.collection('notifications').doc(notificationId).delete();
   }
 
   static Future<List<Review>> getAllReviews() async {
