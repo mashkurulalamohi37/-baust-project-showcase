@@ -29,6 +29,14 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Image.asset(
+            'asset/project.png',
+            fit: BoxFit.contain,
+          ),
+        ),
+        leadingWidth: 60,
         title: const Text('Student Dashboard'),
         backgroundColor: Theme.of(context).colorScheme.primaryContainer,
         foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
@@ -149,7 +157,7 @@ class _ExploreTab extends StatelessWidget {
                     const SizedBox(width: 12),
                     Expanded(
                       child: Text(
-                        'Welcome to BAUST Showcase',
+                        'Welcome to projectshow',
                         style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           color: Theme.of(context).colorScheme.onPrimaryContainer,
                           fontWeight: FontWeight.bold,
@@ -274,6 +282,7 @@ class _UploadTabState extends State<_UploadTab> {
   String? _selectedPdfPath;
   
   ProjectCategory _selectedCategory = ProjectCategory.other;
+  ProjectType _selectedProjectType = ProjectType.project;
   bool _isSubmitting = false;
 
   @override
@@ -287,6 +296,10 @@ class _UploadTabState extends State<_UploadTab> {
   }
 
   Future<void> _submitProject() async {
+    debugPrint('StudentDashboard: _submitProject called');
+    debugPrint('StudentDashboard: Form validation: ${_formKey.currentState?.validate()}');
+    debugPrint('StudentDashboard: Current user: ${widget.authService.currentUser?.name}');
+    
     if (_formKey.currentState!.validate() && widget.authService.currentUser != null) {
       debugPrint('StudentDashboard: Starting project submission');
       setState(() => _isSubmitting = true);
@@ -305,7 +318,9 @@ class _UploadTabState extends State<_UploadTab> {
         githubUrl: _githubController.text.trim().isNotEmpty ? _githubController.text.trim() : null,
         imageUrls: _selectedImagePaths,
         pdfUrl: _selectedPdfPath,
+        supervisor: _supervisorController.text.trim().isNotEmpty ? _supervisorController.text.trim() : null,
         facultyName: _supervisorController.text.trim().isNotEmpty ? _supervisorController.text.trim() : null,
+        projectType: _selectedProjectType,
       );
 
       debugPrint('StudentDashboard: Project created, calling createProject service');
@@ -323,18 +338,31 @@ class _UploadTabState extends State<_UploadTab> {
       if (success && mounted) {
         debugPrint('StudentDashboard: Project submitted successfully, showing success message');
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Project submitted successfully! It will be reviewed by teachers.'),
+          SnackBar(
+            content: Text('${_selectedProjectType == ProjectType.thesis ? 'Thesis' : 'Project'} submitted successfully! It will be reviewed by teachers.'),
             backgroundColor: Colors.green,
           ),
         );
         _clearForm();
+        
+        // Switch to My Projects tab to show the newly submitted project
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            final parentState = context.findAncestorStateOfType<_StudentDashboardScreenState>();
+            if (parentState != null) {
+              parentState.setState(() {
+                parentState._selectedIndex = 2; // Switch to My Projects tab
+              });
+            }
+          }
+        });
       } else if (mounted) {
         debugPrint('StudentDashboard: Project submission failed, showing error message');
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Failed to submit project. Please try again.'),
+            content: Text('Failed to submit project. A project with this title already exists or there was an error. Please try again with a different title.'),
             backgroundColor: Colors.red,
+            duration: Duration(seconds: 5),
           ),
         );
       }
@@ -351,6 +379,7 @@ class _UploadTabState extends State<_UploadTab> {
     _supervisorController.clear();
     setState(() {
       _selectedCategory = ProjectCategory.other;
+      _selectedProjectType = ProjectType.project;
       _selectedImagePaths.clear();
       _selectedPdfPath = null;
     });
@@ -442,7 +471,7 @@ class _UploadTabState extends State<_UploadTab> {
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      'Upload Your Project',
+                      'Upload Your Work',
                       style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                         color: Theme.of(context).colorScheme.onSecondaryContainer,
                         fontWeight: FontWeight.bold,
@@ -450,7 +479,7 @@ class _UploadTabState extends State<_UploadTab> {
                     ),
                     const SizedBox(height: 8),
                     Text(
-                      'Share your academic work with the BAUST community',
+                      'Share your academic work with the projectshow community',
                       style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: Theme.of(context).colorScheme.onSecondaryContainer.withOpacity(0.8),
                       ),
@@ -462,17 +491,172 @@ class _UploadTabState extends State<_UploadTab> {
             ),
             const SizedBox(height: 24),
 
+            // Project Type Selection
+            Card(
+              elevation: 4,
+              color: Theme.of(context).colorScheme.primaryContainer,
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.category,
+                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Select Submission Type',
+                          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                            fontWeight: FontWeight.bold,
+                            color: Theme.of(context).colorScheme.onPrimaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                _selectedProjectType = ProjectType.project;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: _selectedProjectType == ProjectType.project
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _selectedProjectType == ProjectType.project
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.outline,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.code,
+                                    size: 32,
+                                    color: _selectedProjectType == ProjectType.project
+                                        ? Theme.of(context).colorScheme.onPrimary
+                                        : Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Project',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: _selectedProjectType == ProjectType.project
+                                          ? Theme.of(context).colorScheme.onPrimary
+                                          : Theme.of(context).colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  if (_selectedProjectType == ProjectType.project)
+                                    const SizedBox(height: 4),
+                                  if (_selectedProjectType == ProjectType.project)
+                                    Text(
+                                      'Optional: GitHub, Images',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.8),
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                _selectedProjectType = ProjectType.thesis;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: _selectedProjectType == ProjectType.thesis
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _selectedProjectType == ProjectType.thesis
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.outline,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.menu_book,
+                                    size: 32,
+                                    color: _selectedProjectType == ProjectType.thesis
+                                        ? Theme.of(context).colorScheme.onPrimary
+                                        : Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Thesis',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: _selectedProjectType == ProjectType.thesis
+                                          ? Theme.of(context).colorScheme.onPrimary
+                                          : Theme.of(context).colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  if (_selectedProjectType == ProjectType.thesis)
+                                    const SizedBox(height: 4),
+                                  if (_selectedProjectType == ProjectType.thesis)
+                                    Text(
+                                      'PDF Required',
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.8),
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
+
             // Form Fields
             TextFormField(
               controller: _titleController,
-              decoration: const InputDecoration(
-                labelText: 'Project Title',
-                hintText: 'Enter a descriptive title for your project',
-                prefixIcon: Icon(Icons.title),
+              decoration: InputDecoration(
+                labelText: _selectedProjectType == ProjectType.thesis ? 'Thesis Title' : 'Project Title',
+                hintText: _selectedProjectType == ProjectType.thesis 
+                    ? 'Enter a descriptive title for your thesis'
+                    : 'Enter a descriptive title for your project',
+                prefixIcon: const Icon(Icons.title),
               ),
               validator: (value) {
                 if (value == null || value.trim().isEmpty) {
-                  return 'Please enter a project title';
+                  return _selectedProjectType == ProjectType.thesis 
+                      ? 'Please enter a thesis title'
+                      : 'Please enter a project title';
                 }
                 return null;
               },
@@ -538,26 +722,30 @@ class _UploadTabState extends State<_UploadTab> {
             ),
             const SizedBox(height: 16),
 
-            TextFormField(
-              controller: _githubController,
-              decoration: const InputDecoration(
-                labelText: 'GitHub URL (Optional)',
-                hintText: 'https://github.com/username/repository',
-                prefixIcon: Icon(Icons.code),
+            if (_selectedProjectType == ProjectType.project) ...[
+              TextFormField(
+                controller: _githubController,
+                decoration: const InputDecoration(
+                  labelText: 'GitHub URL (Optional)',
+                  hintText: 'https://github.com/username/repository',
+                  prefixIcon: Icon(Icons.code),
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
+              const SizedBox(height: 16),
+            ],
 
             TextFormField(
               controller: _supervisorController,
-              decoration: const InputDecoration(
-                labelText: 'Supervisor Name',
+              decoration: InputDecoration(
+                labelText: _selectedProjectType == ProjectType.thesis ? 'Supervisor Name (Required)' : 'Supervisor Name',
                 hintText: 'e.g., Dr. Sarah Johnson, Prof. Michael Chen',
-                prefixIcon: Icon(Icons.person),
+                prefixIcon: const Icon(Icons.person),
               ),
               validator: (value) {
-                if (value == null || value.trim().isEmpty) {
-                  return 'Please enter your supervisor\'s name';
+                if (_selectedProjectType == ProjectType.thesis) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter your supervisor\'s name';
+                  }
                 }
                 return null;
               },
@@ -577,6 +765,35 @@ class _UploadTabState extends State<_UploadTab> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
+                    if (_selectedProjectType == ProjectType.thesis) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(context).colorScheme.primaryContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.info_outline,
+                              size: 20,
+                              color: Theme.of(context).colorScheme.onPrimaryContainer,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Thesis submission requires a PDF document.',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -587,20 +804,24 @@ class _UploadTabState extends State<_UploadTab> {
                               _selectedPdfPath == null ? Icons.picture_as_pdf_outlined : Icons.check_circle,
                               color: _selectedPdfPath == null ? null : Colors.green,
                             ),
-                            label: Text(_selectedPdfPath == null ? 'Attach PDF' : 'PDF Selected'),
+                            label: Text(_selectedPdfPath == null 
+                                ? (_selectedProjectType == ProjectType.thesis ? 'Attach Thesis PDF (Required)' : 'Attach PDF')
+                                : 'PDF Selected'),
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: OutlinedButton.icon(
-                            onPressed: _pickImages,
-                            icon: Icon(
-                              _selectedImagePaths.isEmpty ? Icons.image_outlined : Icons.check_circle,
-                              color: _selectedImagePaths.isEmpty ? null : Colors.green,
+                        if (_selectedProjectType == ProjectType.project) ...[
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: _pickImages,
+                              icon: Icon(
+                                _selectedImagePaths.isEmpty ? Icons.image_outlined : Icons.check_circle,
+                                color: _selectedImagePaths.isEmpty ? null : Colors.green,
+                              ),
+                              label: Text(_selectedImagePaths.isEmpty ? 'Add Images' : '${_selectedImagePaths.length} Images'),
                             ),
-                            label: Text(_selectedImagePaths.isEmpty ? 'Add Images' : '${_selectedImagePaths.length} Images'),
                           ),
-                        ),
+                        ],
                       ],
                     ),
                     if (_selectedImagePaths.isNotEmpty || _selectedPdfPath != null) ...[
@@ -634,11 +855,23 @@ class _UploadTabState extends State<_UploadTab> {
             ),
             const SizedBox(height: 24),
 
-            // Submit Button
+                    // Submit Button
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: _isSubmitting ? null : _submitProject,
+                onPressed: _isSubmitting ? null : () {
+                  // Validate PDF is required for thesis
+                  if (_selectedProjectType == ProjectType.thesis && _selectedPdfPath == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Please attach a PDF document for thesis submission'),
+                        backgroundColor: Colors.orange,
+                      ),
+                    );
+                    return;
+                  }
+                  _submitProject();
+                },
                 style: FilledButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                 ),
@@ -648,9 +881,9 @@ class _UploadTabState extends State<_UploadTab> {
                         width: 20,
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
-                    : const Text(
-                        'Submit for Review',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                    : Text(
+                        'Submit ${_selectedProjectType == ProjectType.thesis ? 'Thesis' : 'Project'} for Review',
+                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                       ),
               ),
             ),
@@ -661,24 +894,56 @@ class _UploadTabState extends State<_UploadTab> {
   }
 }
 
-class _MyProjectsTab extends StatelessWidget {
-  const _MyProjectsTab({required this.projectService, required this.authService});
+class _MyProjectsTab extends StatefulWidget {
+  const _MyProjectsTab({required this.projectService, required this.authService, Key? key}) : super(key: key);
   final ProjectService projectService;
   final AuthService authService;
 
   @override
+  State<_MyProjectsTab> createState() => _MyProjectsTabState();
+}
+
+class _MyProjectsTabState extends State<_MyProjectsTab> {
+  final GlobalKey<_MyProjectsTabState> _myProjectsTabKey = GlobalKey<_MyProjectsTabState>();
+
+  @override
+  void initState() {
+    super.initState();
+    widget.projectService.ensureProjectsLoaded();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final user = authService.currentUser;
+    final user = widget.authService.currentUser;
     if (user == null) return const Center(child: Text('Please log in'));
 
-    final userProjects = projectService.projects
+    final userProjects = widget.projectService.projects
         .where((p) => p.authorId == user.id)
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    
+    debugPrint('MyProjectsTab: Building with ${userProjects.length} user projects');
 
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'My Projects',
+              style: Theme.of(context).textTheme.headlineSmall,
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              tooltip: 'Refresh My Projects',
+              onPressed: () async {
+                await widget.projectService.ensureProjectsLoaded();
+                setState(() {});
+              },
+            ),
+          ],
+        ),
         // Header
         Card(
           color: Theme.of(context).colorScheme.tertiaryContainer,
@@ -733,14 +998,14 @@ class _MyProjectsTab extends StatelessWidget {
         else
           ...userProjects.map((project) => _ProjectCard(
                 project: project,
-                projectService: projectService,
-                authService: authService,
+                projectService: widget.projectService,
+                authService: widget.authService,
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => ProjectDetailScreen(
                       project: project,
-                      projectService: projectService,
-                      authService: authService,
+                      projectService: widget.projectService,
+                      authService: widget.authService,
                     ),
                   ),
                 ),
@@ -948,27 +1213,29 @@ class _ProjectCard extends StatelessWidget {
               const SizedBox(height: 8),
               
               // Supervisor info
-              if (project.facultyName != null)
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: scheme.primaryContainer.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: scheme.primaryContainer.withOpacity(0.5),
-                      width: 1,
-                    ),
-                  ),
-                  child: Text(
-                    'Supervisor: ${project.facultyName}',
-                    style: TextStyle(
-                      color: scheme.onSurface,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                    ),
+            if (project.facultyName != null && project.facultyName!.isNotEmpty)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: scheme.primaryContainer.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: scheme.primaryContainer.withOpacity(0.5),
+                    width: 1,
                   ),
                 ),
+                child: Text(
+                  project.status == ProjectStatus.approved
+                      ? 'Approved by: ${project.facultyName}'
+                      : 'Supervisor: ${project.facultyName}',
+                  style: TextStyle(
+                    color: scheme.onSurface,
+                    fontWeight: FontWeight.w500,
+                    fontSize: 14,
+                  ),
+                ),
+              ),
               const SizedBox(height: 12),
               
               // Footer with rating, author, and actions

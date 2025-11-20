@@ -1,18 +1,18 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'firebase_options.dart';
 import 'theme.dart';
-import 'mvc/views/auth.dart';
-import 'mvc/views/search_filter.dart';
-import 'mvc/views/project_detail.dart';
-import 'mvc/views/student_dashboard.dart';
-import 'mvc/views/teacher_dashboard.dart';
-import 'mvc/views/admin_dashboard.dart';
+import 'screens/auth.dart';
+import 'screens/search_filter.dart';
+import 'screens/project_detail.dart';
+import 'screens/student_dashboard.dart';
+import 'screens/teacher_dashboard.dart';
+import 'screens/admin_dashboard.dart';
 import 'mvc/controllers/auth_service.dart';
 import 'mvc/controllers/project_service.dart';
 import 'mvc/models/user.dart';
 import 'mvc/models/project.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'firebase_options.dart';
 
 // Global AuthService instance
 final AuthService globalAuthService = AuthService();
@@ -20,6 +20,7 @@ final AuthService globalAuthService = AuthService();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
+  // Initialize Firebase (for Firestore, Auth, and Storage)
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
@@ -27,10 +28,11 @@ void main() async {
     debugPrint('Firebase initialized successfully');
   } catch (e) {
     debugPrint('Firebase initialization error: $e');
-    // Continue anyway - the app should still work with offline mode
+    debugPrint('Please check your Firebase configuration in firebase_options.dart');
+    // Continue anyway - the app might still work with cached data
   }
   
-  runApp(const MyApp());`````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````````
+  runApp(const MyApp());
 }
 
 class MyApp extends StatelessWidget {
@@ -39,7 +41,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'BAUST Showcase',
+      title: 'projectshow',
       theme: buildLightTheme(),
       darkTheme: buildDarkTheme(),
       themeMode: ThemeMode.system,
@@ -1232,9 +1234,13 @@ class _ProjectCard extends StatelessWidget {
                     backgroundColor: scheme.secondaryContainer,
                     labelStyle: TextStyle(color: scheme.onSecondaryContainer),
                   ),
-                  if (project.facultyName != null)
+                  if (project.facultyName != null && project.facultyName!.isNotEmpty)
                     Chip(
-                      label: Text('Supervisor: ${project.facultyName}'),
+                      label: Text(
+                        project.status == ProjectStatus.approved
+                            ? 'Approved by: ${project.facultyName}'
+                            : 'Supervisor: ${project.facultyName}',
+                      ),
                       backgroundColor: scheme.tertiaryContainer,
                       labelStyle: TextStyle(color: scheme.onTertiaryContainer),
                     ),
@@ -1409,22 +1415,16 @@ class _WelcomeScreen extends StatelessWidget {
                 const Spacer(),
                 
                 // Logo and Title
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: scheme.primary,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    Icons.school,
-                    size: 64,
-                    color: Colors.white,
-                  ),
+                Image.asset(
+                  'asset/project.png',
+                  height: 120,
+                  width: 120,
+                  fit: BoxFit.contain,
                 ),
                 const SizedBox(height: 24),
                 
                 Text(
-                  'BAUST Project Showcase',
+                  'projectshow',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                     fontWeight: FontWeight.bold,
                     color: scheme.primary,

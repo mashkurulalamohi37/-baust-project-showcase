@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/project.dart';
 import '../models/user.dart';
+import '../models/feedback.dart' as feedback_models;
 import '../controllers/project_service.dart';
 import '../controllers/auth_service.dart';
 import 'project_detail.dart';
@@ -27,6 +28,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Image.asset(
+            'asset/project.png',
+            fit: BoxFit.contain,
+          ),
+        ),
+        leadingWidth: 60,
         title: const Text('Teacher Dashboard'),
         backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
         foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
@@ -145,9 +154,17 @@ class _ReviewTabState extends State<_ReviewTab> {
 
   @override
   Widget build(BuildContext context) {
-    final pendingProjects = widget.projectService.filterProjectsByStatus(ProjectStatus.pending);
-    final approvedProjects = widget.projectService.filterProjectsByStatus(ProjectStatus.approved);
-    
+    final currentTeacher = widget.authService.currentUser;
+    // Pending projects: Only show to assigned teacher
+    final pendingProjects = widget.projectService
+        .filterProjectsByStatus(ProjectStatus.pending)
+        .where((project) => _isPendingProjectVisibleToTeacher(project, currentTeacher))
+        .toList();
+    // Approved projects: Show to all teachers (they can review)
+    final approvedProjects = widget.projectService
+        .filterProjectsByStatus(ProjectStatus.approved)
+        .toList();
+            
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
@@ -222,6 +239,7 @@ class _ReviewTabState extends State<_ReviewTab> {
             IconButton(
               onPressed: () async {
                 await widget.projectService.ensureProjectsLoaded();
+                setState(() {});
               },
               icon: const Icon(Icons.refresh),
               tooltip: 'Refresh Projects',
@@ -306,15 +324,37 @@ class _ReviewTabState extends State<_ReviewTab> {
   }
 }
 
-class _AllProjectsTab extends StatelessWidget {
+class _AllProjectsTab extends StatefulWidget {
   const _AllProjectsTab({required this.projectService, required this.authService});
   final ProjectService projectService;
   final AuthService authService;
 
   @override
+  State<_AllProjectsTab> createState() => _AllProjectsTabState();
+}
+
+class _AllProjectsTabState extends State<_AllProjectsTab> {
+  String _selectedFilter = 'All'; // 'All', 'Pending', 'Approved', 'Featured'
+
+  @override
   Widget build(BuildContext context) {
-    final allProjects = List<Project>.from(projectService.projects)
+    final teacher = widget.authService.currentUser;
+    // Show approved/featured projects to all teachers, pending only to assigned teacher
+    final allProjects = widget.projectService.projects
+        .where((project) => _isProjectVisibleToTeacher(project, teacher))
+        .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+
+    // Filter projects based on selected filter
+    final filteredProjects = _selectedFilter == 'All'
+        ? allProjects
+        : _selectedFilter == 'Pending'
+            ? allProjects.where((p) => p.status == ProjectStatus.pending).toList()
+            : _selectedFilter == 'Approved'
+                ? allProjects.where((p) => p.status == ProjectStatus.approved).toList()
+                : _selectedFilter == 'Featured'
+                    ? allProjects.where((p) => p.isFeatured || p.status == ProjectStatus.featured).toList()
+                    : allProjects;
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -341,7 +381,7 @@ class _AllProjectsTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${allProjects.length} project${allProjects.length == 1 ? '' : 's'} available for review',
+                  '${filteredProjects.length} project${filteredProjects.length == 1 ? '' : 's'} available for review',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
                   ),
@@ -359,26 +399,42 @@ class _AllProjectsTab extends StatelessWidget {
             children: [
               FilterChip(
                 label: const Text('All'),
-                selected: true,
-                onSelected: (bool selected) {},
+                selected: _selectedFilter == 'All',
+                onSelected: (bool selected) {
+                  if (selected) {
+                    setState(() => _selectedFilter = 'All');
+                  }
+                },
               ),
               const SizedBox(width: 8),
               FilterChip(
                 label: const Text('Pending'),
-                selected: false,
-                onSelected: (bool selected) {},
+                selected: _selectedFilter == 'Pending',
+                onSelected: (bool selected) {
+                  if (selected) {
+                    setState(() => _selectedFilter = 'Pending');
+                  }
+                },
               ),
               const SizedBox(width: 8),
               FilterChip(
                 label: const Text('Approved'),
-                selected: false,
-                onSelected: (bool selected) {},
+                selected: _selectedFilter == 'Approved',
+                onSelected: (bool selected) {
+                  if (selected) {
+                    setState(() => _selectedFilter = 'Approved');
+                  }
+                },
               ),
               const SizedBox(width: 8),
               FilterChip(
                 label: const Text('Featured'),
-                selected: false,
-                onSelected: (bool selected) {},
+                selected: _selectedFilter == 'Featured',
+                onSelected: (bool selected) {
+                  if (selected) {
+                    setState(() => _selectedFilter = 'Featured');
+                  }
+                },
               ),
             ],
           ),
@@ -386,25 +442,27 @@ class _AllProjectsTab extends StatelessWidget {
         const SizedBox(height: 16),
 
         // Projects List
-        if (allProjects.isEmpty)
-          const Card(
+        if (filteredProjects.isEmpty)
+          Card(
             child: Padding(
-              padding: EdgeInsets.all(32),
+              padding: const EdgeInsets.all(32),
               child: Center(
                 child: Column(
                   children: [
-                    Icon(Icons.folder_open, size: 48, color: Colors.grey),
-                    SizedBox(height: 8),
-                    Text('No projects available'),
-                    SizedBox(height: 4),
-                    Text('Students haven\'t uploaded any projects yet'),
+                    const Icon(Icons.folder_open, size: 48, color: Colors.grey),
+                    const SizedBox(height: 8),
+                    Text('No ${_selectedFilter.toLowerCase()} projects'),
+                    const SizedBox(height: 4),
+                    Text(_selectedFilter == 'All' 
+                        ? 'Students haven\'t uploaded any projects yet'
+                        : 'No projects with ${_selectedFilter.toLowerCase()} status'),
                   ],
                 ),
               ),
             ),
           )
         else
-          ...allProjects.map((project) => _ProjectReviewCard(
+          ...filteredProjects.map((project) => _ProjectReviewCard(
                 project: project,
                 projectService: projectService,
                 authService: authService,
@@ -535,12 +593,22 @@ class _AnalyticsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final allProjects = projectService.projects;
+    final teacher = authService.currentUser;
+    // Show approved/featured projects to all teachers, pending only to assigned teacher
+    final allProjects = projectService.projects
+        .where((project) => _isProjectVisibleToTeacher(project, teacher))
+        .toList();
     final projectsByStatus = <ProjectStatus, List<Project>>{};
     
     for (final status in ProjectStatus.values) {
-      projectsByStatus[status] = projectService.filterProjectsByStatus(status);
+      projectsByStatus[status] = projectService
+          .filterProjectsByStatus(status)
+          .where((project) => _isProjectVisibleToTeacher(project, teacher))
+          .toList();
     }
+    
+    // Calculate featured projects count (projects with isFeatured flag or featured status)
+    final featuredCount = allProjects.where((p) => p.isFeatured || p.status == ProjectStatus.featured).length;
 
     final totalReviews = projectService.reviews.length;
     final averageRating = allProjects.isNotEmpty
@@ -589,7 +657,9 @@ class _AnalyticsTab extends StatelessWidget {
           crossAxisCount: 2,
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 1.5,
+          childAspectRatio: 1.3,
+          mainAxisSpacing: 8,
+          crossAxisSpacing: 8,
           children: [
             _AnalyticsCard(
               icon: Icons.folder,
@@ -612,7 +682,7 @@ class _AnalyticsTab extends StatelessWidget {
             _AnalyticsCard(
               icon: Icons.star,
               label: 'Featured',
-              value: projectsByStatus[ProjectStatus.featured]?.length.toString() ?? '0',
+              value: featuredCount.toString(),
               color: Colors.purple,
             ),
             _AnalyticsCard(
@@ -715,13 +785,36 @@ class _ProjectReviewCard extends StatelessWidget {
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: _getStatusColor(project.status).withOpacity(0.3)),
                     ),
-                    child: Text(
-                      project.status.displayName,
-                      style: TextStyle(
-                        color: _getStatusColor(project.status),
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          project.status.displayName,
+                          style: TextStyle(
+                            color: _getStatusColor(project.status),
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        if (project.version > 1) ...[
+                          const SizedBox(width: 4),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: _getStatusColor(project.status),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              'v${project.version}',
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                 ],
@@ -865,7 +958,12 @@ class _ProjectReviewCard extends StatelessWidget {
 
   void _approveProject(BuildContext context, Project project) async {
     final updatedProject = project.copyWith(status: ProjectStatus.approved);
-    final success = await projectService.updateProject(updatedProject);
+    final teacher = authService.currentUser;
+    final success = await projectService.updateProject(
+      updatedProject,
+      approverId: teacher?.id,
+      approverName: teacher?.name,
+    );
     
     if (success && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -876,7 +974,12 @@ class _ProjectReviewCard extends StatelessWidget {
 
   void _rejectProject(BuildContext context, Project project) async {
     final updatedProject = project.copyWith(status: ProjectStatus.rejected);
-    final success = await projectService.updateProject(updatedProject);
+    final teacher = authService.currentUser;
+    final success = await projectService.updateProject(
+      updatedProject,
+      approverId: teacher?.id,
+      approverName: teacher?.name,
+    );
     
     if (success && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1064,8 +1167,7 @@ class _AnalyticsCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.all(4),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: color.withOpacity(0.1),
         borderRadius: BorderRadius.circular(12),
@@ -1073,20 +1175,33 @@ class _AnalyticsCard extends StatelessWidget {
       ),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 24),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: color,
+          Icon(icon, color: color, size: 28),
+          const SizedBox(height: 6),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              value,
+              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                fontWeight: FontWeight.bold,
+                color: color,
+              ),
             ),
           ),
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(color: color),
-            textAlign: TextAlign.center,
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: color,
+                fontSize: 11,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -1111,7 +1226,7 @@ class _FeedbackDialog extends StatefulWidget {
 
 class _FeedbackDialogState extends State<_FeedbackDialog> {
   final _commentController = TextEditingController();
-  FeedbackType _selectedType = FeedbackType.general;
+  int _selectedType = 0; // Index for feedback_models.FeedbackType.values
   bool _isSubmitting = false;
 
   @override
@@ -1136,13 +1251,17 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
             const SizedBox(height: 8),
             Wrap(
               spacing: 8,
-              children: FeedbackType.values.map((type) {
+              children: feedback_models.FeedbackType.values.asMap().entries.map((entry) {
+                final type = entry.value;
+                final index = entry.key;
                 return ChoiceChip(
-                  label: Text('${type.icon} ${type.displayName}'),
-                  selected: _selectedType == type,
+                  label: Text('${_getFeedbackIcon(type)} ${_getFeedbackDisplayName(type)}'),
+                  selected: _selectedType == index,
                   onSelected: (selected) {
                     if (selected) {
-                      setState(() => _selectedType = type);
+                      setState(() {
+                        _selectedType = index;
+                      });
                     }
                   },
                 );
@@ -1193,24 +1312,32 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
     final user = widget.authService.currentUser;
     if (user == null) return;
 
-    final feedback = ProjectFeedback(
+        final feedback = feedback_models.ProjectFeedback(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       projectId: widget.project.id,
       reviewerId: user.id,
       reviewerName: user.name,
       comment: _commentController.text.trim(),
-      type: _selectedType,
+      type: feedback_models.FeedbackType.values[_selectedType],
       createdAt: DateTime.now(),
     );
 
-    final success = await widget.projectService.addFeedback(feedback);
+    final success = await widget.projectService.addFeedback(
+      widget.project.id,
+      _commentController.text.trim(),
+      feedback_models.FeedbackType.values[_selectedType],
+    );
     
     if (success && mounted) {
       // Update project status to needs revision
       final updatedProject = widget.project.copyWith(
         status: ProjectStatus.needsRevision,
       );
-      await widget.projectService.updateProject(updatedProject);
+      await widget.projectService.updateProject(
+        updatedProject,
+        approverId: user.id,
+        approverName: user.name,
+      );
       
       Navigator.of(context).pop();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1230,4 +1357,59 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
 
     setState(() => _isSubmitting = false);
   }
+
+  String _getFeedbackIcon(feedback_models.FeedbackType type) {
+    switch (type) {
+      case feedback_models.FeedbackType.suggestion:
+        return '💡';
+      case feedback_models.FeedbackType.issue:
+        return '⚠️';
+      case feedback_models.FeedbackType.improvement:
+        return '🔧';
+      case feedback_models.FeedbackType.question:
+        return '❓';
+    }
+  }
+
+  String _getFeedbackDisplayName(feedback_models.FeedbackType type) {
+    switch (type) {
+      case feedback_models.FeedbackType.suggestion:
+        return 'Suggestion';
+      case feedback_models.FeedbackType.issue:
+        return 'Issue';
+      case feedback_models.FeedbackType.improvement:
+        return 'Improvement';
+      case feedback_models.FeedbackType.question:
+        return 'Question';
+    }
+  }
+}
+
+// Check if a pending project is visible to a teacher (only assigned teacher can see pending)
+bool _isPendingProjectVisibleToTeacher(Project project, User? teacher) {
+  if (teacher == null) return false;
+  // If project has no assigned teacher, don't show to anyone (should be assigned first)
+  if (project.facultyId == null || project.facultyId!.isEmpty) return false;
+  // Only show to the assigned teacher
+  return project.facultyId == teacher.id;
+}
+
+// Check if a project is visible to a teacher (for general visibility checks)
+bool _isProjectVisibleToTeacher(Project project, User? teacher) {
+  if (teacher == null) return false;
+  
+  // Approved projects: visible to all teachers (they can review)
+  if (project.status == ProjectStatus.approved || 
+      project.status == ProjectStatus.featured) {
+    return true;
+  }
+  
+  // Pending projects: only visible to assigned teacher
+  if (project.status == ProjectStatus.pending) {
+    return _isPendingProjectVisibleToTeacher(project, teacher);
+  }
+  
+  // Other statuses: only visible to assigned teacher
+  if (project.facultyId == null || project.facultyId!.isEmpty) return false;
+  return project.facultyId == teacher.id;
 }

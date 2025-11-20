@@ -1,3 +1,6 @@
+import 'review.dart';
+import 'feedback.dart';
+
 class Project {
   final String id;
   final String title;
@@ -6,6 +9,7 @@ class Project {
   final String authorName;
   final ProjectCategory category;
   final int year;
+  final String? supervisor;
   final DateTime createdAt;
   final DateTime updatedAt;
   final ProjectStatus status;
@@ -22,6 +26,7 @@ class Project {
   final String? parentProjectId;
   final List<ProjectFeedback> feedback;
   final List<ProjectVersion> versions;
+  final ProjectType projectType;
 
   const Project({
     required this.id,
@@ -31,6 +36,7 @@ class Project {
     required this.authorName,
     required this.category,
     required this.year,
+    this.supervisor,
     required this.createdAt,
     required this.updatedAt,
     required this.status,
@@ -47,6 +53,7 @@ class Project {
     this.parentProjectId,
     this.feedback = const [],
     this.versions = const [],
+    this.projectType = ProjectType.project,
   });
 
   Project copyWith({
@@ -57,6 +64,7 @@ class Project {
     String? authorName,
     ProjectCategory? category,
     int? year,
+    String? supervisor,
     DateTime? createdAt,
     DateTime? updatedAt,
     ProjectStatus? status,
@@ -73,6 +81,7 @@ class Project {
     String? parentProjectId,
     List<ProjectFeedback>? feedback,
     List<ProjectVersion>? versions,
+    ProjectType? projectType,
   }) {
     return Project(
       id: id ?? this.id,
@@ -82,6 +91,7 @@ class Project {
       authorName: authorName ?? this.authorName,
       category: category ?? this.category,
       year: year ?? this.year,
+      supervisor: supervisor ?? this.supervisor,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
       status: status ?? this.status,
@@ -98,6 +108,7 @@ class Project {
       parentProjectId: parentProjectId ?? this.parentProjectId,
       feedback: feedback ?? this.feedback,
       versions: versions ?? this.versions,
+      projectType: projectType ?? this.projectType,
     );
   }
 
@@ -110,6 +121,7 @@ class Project {
       'authorName': authorName,
       'category': category.name,
       'year': year,
+      'supervisor': supervisor,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
       'status': status.name,
@@ -126,6 +138,7 @@ class Project {
       'parentProjectId': parentProjectId,
       'feedback': feedback.map((f) => f.toMap()).toList(),
       'versions': versions.map((v) => v.toMap()).toList(),
+      'projectType': projectType.name,
     };
   }
 }
@@ -145,6 +158,11 @@ enum ProjectCategory {
   other,
 }
 
+enum ProjectType {
+  project,
+  thesis,
+}
+
 enum ProjectStatus {
   draft,
   pending,
@@ -153,6 +171,17 @@ enum ProjectStatus {
   featured,
   needsRevision,
   resubmitted,
+}
+
+extension ProjectTypeExtension on ProjectType {
+  String get displayName {
+    switch (this) {
+      case ProjectType.project:
+        return 'Project';
+      case ProjectType.thesis:
+        return 'Thesis';
+    }
+  }
 }
 
 extension ProjectCategoryExtension on ProjectCategory {
@@ -207,82 +236,6 @@ extension ProjectStatusExtension on ProjectStatus {
   }
 }
 
-class Review {
-  final String id;
-  final String projectId;
-  final String reviewerId;
-  final String reviewerName;
-  final double rating;
-  final String comment;
-  final DateTime createdAt;
-
-  const Review({
-    required this.id,
-    required this.projectId,
-    required this.reviewerId,
-    required this.reviewerName,
-    required this.rating,
-    required this.comment,
-    required this.createdAt,
-  });
-}
-
-class ProjectFeedback {
-  final String id;
-  final String projectId;
-  final String reviewerId;
-  final String reviewerName;
-  final String comment;
-  final FeedbackType type;
-  final DateTime createdAt;
-  final bool isResolved;
-
-  const ProjectFeedback({
-    required this.id,
-    required this.projectId,
-    required this.reviewerId,
-    required this.reviewerName,
-    required this.comment,
-    required this.type,
-    required this.createdAt,
-    this.isResolved = false,
-  });
-
-  ProjectFeedback copyWith({
-    String? id,
-    String? projectId,
-    String? reviewerId,
-    String? reviewerName,
-    String? comment,
-    FeedbackType? type,
-    DateTime? createdAt,
-    bool? isResolved,
-  }) {
-    return ProjectFeedback(
-      id: id ?? this.id,
-      projectId: projectId ?? this.projectId,
-      reviewerId: reviewerId ?? this.reviewerId,
-      reviewerName: reviewerName ?? this.reviewerName,
-      comment: comment ?? this.comment,
-      type: type ?? this.type,
-      createdAt: createdAt ?? this.createdAt,
-      isResolved: isResolved ?? this.isResolved,
-    );
-  }
-
-  Map<String, dynamic> toMap() {
-    return {
-      'id': id,
-      'projectId': projectId,
-      'reviewerId': reviewerId,
-      'reviewerName': reviewerName,
-      'comment': comment,
-      'type': type.name,
-      'createdAt': createdAt.toIso8601String(),
-      'isResolved': isResolved,
-    };
-  }
-}
 
 class ProjectVersion {
   final String id;
@@ -325,37 +278,3 @@ class ProjectVersion {
   }
 }
 
-enum FeedbackType {
-  general,
-  improvement,
-  critical,
-  approval,
-}
-
-extension FeedbackTypeExtension on FeedbackType {
-  String get displayName {
-    switch (this) {
-      case FeedbackType.general:
-        return 'General Feedback';
-      case FeedbackType.improvement:
-        return 'Needs Improvement';
-      case FeedbackType.critical:
-        return 'Critical Issues';
-      case FeedbackType.approval:
-        return 'Approval';
-    }
-  }
-  
-  String get icon {
-    switch (this) {
-      case FeedbackType.general:
-        return '💬';
-      case FeedbackType.improvement:
-        return '🔧';
-      case FeedbackType.critical:
-        return '⚠️';
-      case FeedbackType.approval:
-        return '✅';
-    }
-  }
-}

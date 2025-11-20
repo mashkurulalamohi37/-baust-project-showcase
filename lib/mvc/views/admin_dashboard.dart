@@ -27,6 +27,14 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
+        leading: Padding(
+          padding: const EdgeInsets.all(8.0),
+          child: Image.asset(
+            'asset/project.png',
+            fit: BoxFit.contain,
+          ),
+        ),
+        leadingWidth: 60,
         title: const Text('Admin Dashboard'),
         backgroundColor: Theme.of(context).colorScheme.errorContainer,
         foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
@@ -80,6 +88,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               _UserManagementTab(projectService: _projectService, authService: _authService),
               _ProjectManagementTab(projectService: _projectService, authService: _authService),
               _SystemSettingsTab(projectService: _projectService, authService: _authService),
+              _AnalyticsTab(projectService: _projectService, authService: _authService),
+              _ReportsTab(projectService: _projectService, authService: _authService),
             ],
           );
         },
@@ -108,6 +118,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             selectedIcon: Icon(Icons.settings),
             label: 'Settings',
           ),
+          NavigationDestination(
+            icon: Icon(Icons.analytics_outlined),
+            selectedIcon: Icon(Icons.analytics),
+            label: 'Analytics',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.assessment_outlined),
+            selectedIcon: Icon(Icons.assessment),
+            label: 'Reports',
+          ),
         ],
       ),
     );
@@ -119,14 +139,25 @@ class _OverviewTab extends StatelessWidget {
   final ProjectService projectService;
   final AuthService authService;
 
+  Future<Map<ProjectStatus, List<Project>>> _loadProjectsByStatus() async {
+    final projectsByStatus = <ProjectStatus, List<Project>>{};
+    for (final status in ProjectStatus.values) {
+      projectsByStatus[status] = await projectService.filterProjectsByStatus(status);
+    }
+    return projectsByStatus;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final allProjects = projectService.projects;
-    final projectsByStatus = <ProjectStatus, List<Project>>{};
-    
-    for (final status in ProjectStatus.values) {
-      projectsByStatus[status] = projectService.filterProjectsByStatus(status);
-    }
+    return FutureBuilder<Map<ProjectStatus, List<Project>>>(
+      future: _loadProjectsByStatus(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        
+        final projectsByStatus = snapshot.data!;
+        final allProjects = projectService.projects;
 
     final totalUsers = 1; // Mock data - in real app, get from user service
     final pendingTeachers = 0; // Mock data - in real app, get from user service
@@ -300,6 +331,8 @@ class _OverviewTab extends StatelessWidget {
           ),
         ),
       ],
+    );
+      },
     );
   }
 }
@@ -1338,7 +1371,12 @@ class _AdminProjectCard extends StatelessWidget {
       status: ProjectStatus.featured,
       isFeatured: true,
     );
-    final success = await projectService.updateProject(updatedProject);
+    final admin = authService.currentUser;
+    final success = await projectService.updateProject(
+      updatedProject,
+      approverId: admin?.id,
+      approverName: admin?.name,
+    );
     
     if (success && context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1878,6 +1916,246 @@ class _StatusChip extends StatelessWidget {
         ),
         overflow: TextOverflow.ellipsis,
         maxLines: 1,
+      ),
+    );
+  }
+}
+
+class _AnalyticsTab extends StatelessWidget {
+  const _AnalyticsTab({required this.projectService, required this.authService});
+  final ProjectService projectService;
+  final AuthService authService;
+
+  @override
+  Widget build(BuildContext context) {
+    final totalProjects = projectService.projects.length;
+    final approvedProjects = projectService.projects.where((p) => p.status == ProjectStatus.approved).length;
+    final pendingProjects = projectService.projects.where((p) => p.status == ProjectStatus.pending).length;
+    final featuredProjects = projectService.projects.where((p) => p.isFeatured).length;
+    
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Header
+        Card(
+          color: Theme.of(context).colorScheme.primaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.analytics,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.onPrimaryContainer,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'System Analytics',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Comprehensive insights into platform usage and performance',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Project Statistics
+        Text(
+          'Project Statistics',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Expanded(
+              child: _AdminStatCard(
+                icon: Icons.folder,
+                label: 'Total Projects',
+                value: totalProjects.toString(),
+                color: Colors.blue,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _AdminStatCard(
+                icon: Icons.check_circle,
+                label: 'Approved',
+                value: approvedProjects.toString(),
+                color: Colors.green,
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: _AdminStatCard(
+                icon: Icons.pending,
+                label: 'Pending',
+                value: pendingProjects.toString(),
+                color: Colors.orange,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: _AdminStatCard(
+                icon: Icons.star,
+                label: 'Featured',
+                value: featuredProjects.toString(),
+                color: Colors.purple,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _ReportsTab extends StatelessWidget {
+  const _ReportsTab({required this.projectService, required this.authService});
+  final ProjectService projectService;
+  final AuthService authService;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Header
+        Card(
+          color: Theme.of(context).colorScheme.secondaryContainer,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              children: [
+                Icon(
+                  Icons.assessment,
+                  size: 48,
+                  color: Theme.of(context).colorScheme.onSecondaryContainer,
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  'System Reports',
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSecondaryContainer,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Generate detailed reports and export data',
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    color: Theme.of(context).colorScheme.onSecondaryContainer.withOpacity(0.8),
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 24),
+
+        // Report Actions
+        Text(
+          'Generate Reports',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 16),
+        Wrap(
+          spacing: 12,
+          runSpacing: 12,
+          children: [
+            _ReportCard(
+              icon: Icons.people,
+              title: 'User Report',
+              subtitle: 'All users and their status',
+              onTap: () => _generateUserReport(context),
+            ),
+            _ReportCard(
+              icon: Icons.folder,
+              title: 'Project Report',
+              subtitle: 'All projects and statistics',
+              onTap: () => _generateProjectReport(context),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  void _generateUserReport(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('User report generation started...')),
+    );
+  }
+
+  void _generateProjectReport(BuildContext context) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Project report generation started...')),
+    );
+  }
+}
+
+class _ReportCard extends StatelessWidget {
+  const _ReportCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.onTap,
+  });
+  
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, size: 32, color: Theme.of(context).primaryColor),
+              const SizedBox(height: 8),
+              Text(
+                title,
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                subtitle,
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: Colors.grey[600],
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

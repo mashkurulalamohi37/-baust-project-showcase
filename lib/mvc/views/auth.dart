@@ -26,7 +26,7 @@ class _AuthGateState extends State<AuthGate> {
             children: <Widget>[
               const SizedBox(height: 24),
               Text(
-                'BAUST Showcase',
+                'projectshow',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
                 textAlign: TextAlign.center,
               ),
@@ -436,9 +436,10 @@ class _SignupFormState extends State<_SignupForm> {
         
         widget.onEnter(_selectedRole);
       } else if (mounted) {
+        final errorText = widget.authService.errorMessage ?? 'Signup failed. Please try again.';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.authService.errorMessage ?? 'Signup failed. Please try again.'),
+            content: Text(errorText),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -516,8 +517,11 @@ class _SignupFormState extends State<_SignupForm> {
                     ),
                     textCapitalization: TextCapitalization.words,
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      if (_selectedRole == UserRole.teacher && (value == null || value.trim().isEmpty)) {
                         return 'Please enter your department';
+                      }
+                      if (_selectedRole == UserRole.teacher && _departmentController.text.trim().isEmpty) {
+                        return 'Department required for teachers';
                       }
                       return null;
                     },
@@ -532,7 +536,7 @@ class _SignupFormState extends State<_SignupForm> {
                       prefixIcon: Icon(Icons.badge),
                     ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      if (_selectedRole == UserRole.teacher && (value == null || value.isEmpty)) {
                         return 'Please enter your employee ID';
                       }
                       return null;

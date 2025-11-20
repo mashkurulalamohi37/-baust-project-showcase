@@ -17,7 +17,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   Future<void> _approveProject(Project project) async {
     final updatedProject = project.copyWith(status: ProjectStatus.approved);
-    final success = await _projectService.updateProject(updatedProject);
+    final teacher = _authService.currentUser;
+    final success = await _projectService.updateProject(
+      updatedProject,
+      approverId: teacher?.id,
+      approverName: teacher?.name,
+    );
     
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -28,7 +33,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
 
   Future<void> _rejectProject(Project project) async {
     final updatedProject = project.copyWith(status: ProjectStatus.rejected);
-    final success = await _projectService.updateProject(updatedProject);
+    final teacher = _authService.currentUser;
+    final success = await _projectService.updateProject(
+      updatedProject,
+      approverId: teacher?.id,
+      approverName: teacher?.name,
+    );
     
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -42,7 +52,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
       status: ProjectStatus.featured,
       isFeatured: true,
     );
-    final success = await _projectService.updateProject(updatedProject);
+    final teacher = _authService.currentUser;
+    final success = await _projectService.updateProject(
+      updatedProject,
+      approverId: teacher?.id,
+      approverName: teacher?.name,
+    );
     
     if (success && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -191,6 +206,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         builder: (_) => ProjectDetailScreen(
                           project: project,
                           projectService: _projectService,
+                          authService: _authService,
             ),
           )),
                     ),
@@ -287,18 +303,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   @override
+  Future<Map<ProjectStatus, List<Project>>> _loadProjectsByStatus() async {
+    final projectsByStatus = <ProjectStatus, List<Project>>{};
+    for (final status in ProjectStatus.values) {
+      projectsByStatus[status] = await _projectService.filterProjectsByStatus(status);
+    }
+    return projectsByStatus;
+  }
+
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Admin Dashboard')),
       body: AnimatedBuilder(
         animation: _projectService,
         builder: (context, child) {
-          final allProjects = _projectService.projects;
-          final projectsByStatus = <ProjectStatus, List<Project>>{};
-          
-          for (final status in ProjectStatus.values) {
-            projectsByStatus[status] = _projectService.filterProjectsByStatus(status);
-          }
+          return FutureBuilder<Map<ProjectStatus, List<Project>>>(
+            future: _loadProjectsByStatus(),
+            builder: (context, snapshot) {
+              if (!snapshot.hasData) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              
+              final allProjects = _projectService.projects;
+              final projectsByStatus = snapshot.data!;
 
           return ListView(
         padding: const EdgeInsets.all(16),
@@ -384,6 +411,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                               builder: (_) => ProjectDetailScreen(
                                 project: project,
                                 projectService: _projectService,
+                                authService: _authService,
                               ),
                             ));
                             break;
@@ -455,6 +483,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 ),
               ),
             ],
+          );
+            },
           );
         },
       ),

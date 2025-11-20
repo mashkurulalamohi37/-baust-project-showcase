@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../controllers/notification_service.dart';
+import '../controllers/notification_service.dart' as notification_service;
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -9,7 +9,7 @@ class NotificationsScreen extends StatefulWidget {
 }
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
-  final NotificationService _notificationService = NotificationService();
+  final notification_service.NotificationService _notificationService = notification_service.NotificationService();
   String _currentUserId = 'current_user_id'; // This should come from auth service
 
   @override
@@ -96,7 +96,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     );
   }
 
-  void _handleNotificationTap(Notification notification) async {
+  void _handleNotificationTap(notification_service.Notification notification) async {
     // Mark as read if not already read
     if (!notification.isRead) {
       await _notificationService.markAsRead(notification.id);
@@ -104,11 +104,11 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     // Handle different notification types
     switch (notification.type) {
-      case NotificationType.projectApproved:
-      case NotificationType.projectRejected:
-      case NotificationType.projectNeedsRevision:
-      case NotificationType.projectFeatured:
-      case NotificationType.newReview:
+        case notification_service.NotificationType.projectApproved:
+        case notification_service.NotificationType.projectRejected:
+        case notification_service.NotificationType.projectNeedsRevision:
+        case notification_service.NotificationType.projectFeatured:
+        case notification_service.NotificationType.newReview:
         if (notification.projectId != null) {
           // Navigate to project detail
           // TODO: Implement navigation to project detail
@@ -117,8 +117,8 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           );
         }
         break;
-      case NotificationType.accountApproved:
-      case NotificationType.accountRejected:
+      case notification_service.NotificationType.accountApproved:
+      case notification_service.NotificationType.accountRejected:
         // Navigate to profile or settings
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Navigate to profile settings')),
@@ -131,7 +131,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 }
 
 class _NotificationCard extends StatelessWidget {
-  final Notification notification;
+  final notification_service.Notification notification;
   final VoidCallback onTap;
   final VoidCallback onMarkAsRead;
   final VoidCallback onDelete;
@@ -276,23 +276,23 @@ class _NotificationCard extends StatelessWidget {
     );
   }
 
-  Color _getNotificationColor(NotificationType type) {
+  Color _getNotificationColor(notification_service.NotificationType type) {
     switch (type) {
-      case NotificationType.projectApproved:
-      case NotificationType.accountApproved:
+      case notification_service.NotificationType.projectApproved:
+      case notification_service.NotificationType.accountApproved:
         return Colors.green;
-      case NotificationType.projectRejected:
-      case NotificationType.accountRejected:
+      case notification_service.NotificationType.projectRejected:
+      case notification_service.NotificationType.accountRejected:
         return Colors.red;
-      case NotificationType.projectNeedsRevision:
+      case notification_service.NotificationType.projectNeedsRevision:
         return Colors.orange;
-      case NotificationType.projectFeatured:
+      case notification_service.NotificationType.projectFeatured:
         return Colors.purple;
-      case NotificationType.newReview:
+      case notification_service.NotificationType.newReview:
         return Colors.blue;
-      case NotificationType.systemMessage:
+      case notification_service.NotificationType.systemMessage:
         return Colors.grey;
-      case NotificationType.general:
+      case notification_service.NotificationType.general:
         return Colors.teal;
     }
   }

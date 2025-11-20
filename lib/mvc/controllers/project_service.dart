@@ -1,9 +1,12 @@
 import 'package:flutter/foundation.dart';
-import 'package:firebase_storage/firebase_storage.dart';
 import 'dart:io';
 import '../models/project.dart';
+import '../models/review.dart';
+import '../models/feedback.dart' as feedback_models;
 import 'firestore_service.dart';
 import 'notification_service.dart';
+import 'auth_service.dart';
+import '../../services/firestore_service.dart' as firestore_service;
 
 class ProjectService extends ChangeNotifier {
   // Singleton instance so project data is shared app-wide
@@ -19,6 +22,7 @@ class ProjectService extends ChangeNotifier {
   final List<String> _bookmarkedProjectIds = [];
   bool _isLoading = false;
   bool _initialized = false;
+  String? _lastUploadError;
 
   List<Project> get projects => List.unmodifiable(_projects);
   List<Review> get reviews => List.unmodifiable(_reviews);
@@ -41,30 +45,27 @@ class ProjectService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _loadProjects() async {
-    if (_initialized) return;
+  Future<void> _loadProjects({bool force = false}) async {
+    if (_isLoading) return;
+    if (_initialized && !force) return;
     _setLoading(true);
     debugPrint('ProjectService: Loading projects from Firestore');
     
     try {
       // Load projects from Firestore
-      final projects = await FirestoreService.getAllProjects();
+      final projects = await FirestoreService.getProjects();
       debugPrint('ProjectService: Loaded ${projects.length} projects from Firestore');
       
       _projects.clear();
       _projects.addAll(projects);
       
-      // Load reviews from Firestore
-      final reviews = await FirestoreService.getAllReviews();
-      debugPrint('ProjectService: Loaded ${reviews.length} reviews from Firestore');
-      
-      _reviews.clear();
-      _reviews.addAll(reviews);
+      // Load reviews will be done per project when needed
+      // For now, we'll load reviews separately
       
       _initialized = true;
       _setLoading(false);
       notifyListeners();
-      debugPrint('ProjectService: Projects and reviews loaded successfully');
+      debugPrint('ProjectService: Projects loaded successfully');
     } catch (e) {
       debugPrint('ProjectService: Error loading projects from Firestore: $e');
       
@@ -84,36 +85,103 @@ class ProjectService extends ChangeNotifier {
     }
   }
 
+  Future<void> reloadProjects() async {
+    await _loadProjects(force: true);
+  }
+
   Future<bool> createProject(Project project) async {
     _setLoading(true);
     debugPrint('ProjectService: Starting project creation for ${project.title}');
     
     try {
-      String? pdfUrl;
-      List<String> imageUrls = [];
+      // Check for duplicate projects (same title by same author with pending/draft status)
+      // Allow duplicates if the existing project is approved/rejected (user can resubmit)
+      final duplicateProject = _projects.where((p) => 
+        p.title.toLowerCase() == project.title.toLowerCase() && 
+        p.authorId == project.authorId &&
+        (p.status == ProjectStatus.pending || p.status == ProjectStatus.draft)
+      ).firstOrNull;
       
-      // Upload PDF if exists
-      if (project.pdfUrl != null && project.pdfUrl!.isNotEmpty) {
-        debugPrint('ProjectService: Uploading PDF file');
-        pdfUrl = await _uploadFile(project.pdfUrl!, 'pdfs', 'pdf');
-        if (pdfUrl == null) {
-          debugPrint('ProjectService: Failed to upload PDF');
-          _setLoading(false);
-          return false;
-        }
+      if (duplicateProject != null) {
+        debugPrint('ProjectService: Duplicate project found with title: ${project.title} (status: ${duplicateProject.status})');
+        _setLoading(false);
+        _lastUploadError = 'A project with the title "${project.title}" is already pending. Please use a different title or wait for the existing project to be reviewed.';
+        return false;
       }
       
-      // Upload images if exist
-      if (project.imageUrls.isNotEmpty) {
-        debugPrint('ProjectService: Uploading ${project.imageUrls.length} image files');
-        for (int i = 0; i < project.imageUrls.length; i++) {
-          final imageUrl = await _uploadFile(project.imageUrls[i], 'images', 'jpg');
-          if (imageUrl != null) {
-            imageUrls.add(imageUrl);
+      // Upload files to Firebase Storage
+      List<String> imageUrls = [];
+      String? pdfUrl;
+      
+      // Upload PDF if provided
+      bool pdfUploadRequired = project.pdfUrl != null && project.pdfUrl!.isNotEmpty;
+      bool pdfUploadFailed = false;
+      
+      if (pdfUploadRequired) {
+        debugPrint('ProjectService: Uploading PDF file: ${project.pdfUrl}');
+        try {
+          debugPrint('ProjectService: Using Firebase Storage for PDF upload');
+          pdfUrl = await FirestoreService.uploadFile(
+            project.pdfUrl!,
+            'projects/${project.id}/project_${DateTime.now().millisecondsSinceEpoch}.pdf',
+          );
+          if (pdfUrl != null) {
+            debugPrint('ProjectService: PDF uploaded to Firebase: $pdfUrl');
           } else {
-            debugPrint('ProjectService: Failed to upload image ${i + 1}');
+            final errorMsg = 'PDF upload failed';
+            debugPrint('ProjectService: PDF upload returned null');
+            debugPrint('ProjectService: Error message: $errorMsg');
+            pdfUploadFailed = true;
+            // Store error for display
+            _lastUploadError = errorMsg ?? 'PDF upload failed. Check Firebase configuration.';
+          }
+          
+          if (pdfUrl == null) {
+            pdfUploadFailed = true;
+            debugPrint('ProjectService: ERROR - Failed to upload PDF!');
+            debugPrint('ProjectService: PDF file path was: ${project.pdfUrl}');
+            debugPrint('ProjectService: This means the PDF will not be accessible. Please check:');
+            debugPrint('  1. Firebase Storage bucket exists and is configured');
+            debugPrint('  2. Storage rules allow upload operations');
+            debugPrint('  3. Firebase is properly initialized');
+            debugPrint('  4. Check console logs above for specific error messages');
+          } else {
+            debugPrint('ProjectService: PDF uploaded successfully: $pdfUrl');
+          }
+        } catch (e, stackTrace) {
+          pdfUploadFailed = true;
+          final errorString = e.toString();
+          debugPrint('ProjectService: ERROR uploading PDF: $e');
+          debugPrint('ProjectService: Stack trace: $stackTrace');
+          debugPrint('ProjectService: Exception details: $errorString');
+          // Store the actual error message
+          _lastUploadError = errorString.replaceAll('Exception: ', '').replaceAll('Error: ', '');
+          if (_lastUploadError?.isEmpty ?? true) {
+            _lastUploadError = 'PDF upload failed. Please check Firebase Storage configuration.';
           }
         }
+      } else {
+        debugPrint('ProjectService: No PDF to upload (pdfUrl is null or empty)');
+      }
+      
+      // If PDF upload failed, throw an error to prevent saving project
+      if (pdfUploadFailed) {
+        _setLoading(false);
+        final errorMsg = _lastUploadError ?? 'PDF upload failed. Please check Firebase configuration and try again.';
+        throw Exception(errorMsg);
+      }
+      
+      // Upload images if provided
+      if (project.imageUrls.isNotEmpty) {
+        debugPrint('ProjectService: Uploading ${project.imageUrls.length} image(s)');
+        
+        // Use Firebase Storage batch upload
+        final uploadedUrls = await FirestoreService.uploadMultipleFiles(
+          project.imageUrls,
+          'projects/${project.id}',
+        );
+        imageUrls.addAll(uploadedUrls);
+        debugPrint('ProjectService: Uploaded ${uploadedUrls.length} images to Firebase');
       }
       
       // Create project with uploaded file URLs
@@ -123,12 +191,36 @@ class ProjectService extends ChangeNotifier {
       );
       
       debugPrint('ProjectService: Saving project to Firestore');
-      await FirestoreService.saveProject(projectWithUrls);
-      _projects.add(projectWithUrls);
-      _setLoading(false);
-      notifyListeners();
-      debugPrint('ProjectService: Project created successfully');
-      return true;
+      debugPrint('ProjectService: Project has ${imageUrls.length} images and PDF: ${pdfUrl != null}');
+      if (pdfUrl != null) {
+        debugPrint('ProjectService: PDF URL to be saved: $pdfUrl');
+      } else {
+        debugPrint('ProjectService: WARNING - PDF URL is null, original file path was: ${project.pdfUrl}');
+      }
+      if (imageUrls.isNotEmpty) {
+        debugPrint('ProjectService: Image URLs to be saved: ${imageUrls.join(", ")}');
+      }
+      try {
+        await FirestoreService.saveProject(projectWithUrls);
+        debugPrint('ProjectService: Project saved to Firestore successfully');
+        
+        _projects.add(projectWithUrls);
+        debugPrint('ProjectService: Project added to local list. Total projects: ${_projects.length}');
+        
+        // Log activity
+        await firestore_service.FirestoreService.logProjectUploaded(projectWithUrls);
+        _setLoading(false);
+        notifyListeners();
+        debugPrint('ProjectService: Project created successfully and listeners notified');
+        // Force reload all projects so other dashboards see the latest list immediately
+        await _loadProjects(force: true);
+        return true;
+      } catch (e) {
+        debugPrint('ProjectService: Failed to save project to Firestore: $e');
+        debugPrint('ProjectService: Please check Firebase connection and configuration');
+        _setLoading(false);
+        return false;
+      }
     } catch (e) {
       debugPrint('ProjectService: Error creating project: $e');
       debugPrint('ProjectService: Stack trace: ${StackTrace.current}');
@@ -137,28 +229,63 @@ class ProjectService extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateProject(Project project) async {
+  Future<bool> updateProject(
+    Project project, {
+    String? approverId,
+    String? approverName,
+  }) async {
     _setLoading(true);
-    
     try {
       // Get the original project to check for status changes
-      final originalProject = _projects.firstWhere((p) => p.id == project.id);
+      final originalProject = _projects.firstWhere(
+        (p) => p.id == project.id,
+        orElse: () => project,
+      );
       final statusChanged = originalProject.status != project.status;
-      
-      await FirestoreService.saveProject(project);
-      
+      final oldStatus = originalProject.status;
+
+      // If project was in needsRevision status and is being updated by student (not teacher),
+      // automatically change status to pending for re-approval
+      ProjectStatus newStatus = project.status;
+      if (originalProject.status == ProjectStatus.needsRevision && 
+          project.status == ProjectStatus.needsRevision &&
+          approverId == null) {
+        // Student is updating their project - change to pending
+        newStatus = ProjectStatus.pending;
+        debugPrint('ProjectService: Project ${project.id} updated from needsRevision to pending for re-approval');
+      }
+
+      // Update project in Firestore
+      final updatedProject = project.copyWith(
+        status: newStatus,
+        facultyId: approverId ?? project.facultyId,
+        facultyName: approverName ?? project.facultyName,
+      );
+      await FirestoreService.updateProject(updatedProject);
+
       final index = _projects.indexWhere((p) => p.id == project.id);
       if (index != -1) {
-        _projects[index] = project;
+        _projects[index] = updatedProject;
       } else {
-        _projects.add(project);
+        _projects.add(updatedProject);
       }
-      
+
       // Send notifications for status changes
       if (statusChanged) {
-        await _sendStatusChangeNotifications(originalProject, project);
+        await _sendStatusChangeNotifications(originalProject, updatedProject);
+        // Log activity for status change
+        await firestore_service.FirestoreService.logProjectStatusChange(
+          updatedProject,
+          oldStatus,
+          updatedProject.status,
+          approverId,
+          approverName,
+        );
       }
       
+      // Always reload projects after update to ensure UI reflects changes (especially for featured status)
+      await _loadProjects(force: true);
+
       _setLoading(false);
       notifyListeners();
       return true;
@@ -216,6 +343,7 @@ class ProjectService extends ChangeNotifier {
       
       _setLoading(false);
       notifyListeners();
+      await _loadProjects(force: true);
       return true;
     } catch (e) {
       debugPrint('Error deleting project: $e');
@@ -225,21 +353,32 @@ class ProjectService extends ChangeNotifier {
   }
 
   // Review and Rating System
-  Future<bool> addReview(String projectId, int rating, String comment) async {
+  Future<bool> addReview(String projectId, double rating, String comment) async {
     _setLoading(true);
     
     try {
+      // Get current user from AuthService
+      final authService = AuthService();
+      final currentUser = authService.currentUser;
+      final reviewerName = currentUser?.name ?? 'Unknown User';
+      final reviewerId = currentUser?.id ?? _getCurrentUserId();
+      
       final review = Review(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         projectId: projectId,
-        reviewerId: _getCurrentUserId(),
-        reviewerName: 'Current User', // Get from auth service
+        reviewerId: reviewerId,
+        reviewerName: reviewerName,
         rating: rating,
         comment: comment,
         createdAt: DateTime.now(),
       );
 
       await FirestoreService.saveReview(review);
+      
+      // Load reviews for the project to update local cache
+      final projectReviews = await FirestoreService.getReviewsByProjectId(projectId);
+      _reviews.removeWhere((r) => r.projectId == projectId);
+      _reviews.addAll(projectReviews);
       
       // Update project rating
       final project = _projects.firstWhere((p) => p.id == projectId);
@@ -256,6 +395,9 @@ class ProjectService extends ChangeNotifier {
       final notificationService = NotificationService();
       await notificationService.notifyNewReview(project.authorId, project, review.reviewerName);
       
+      // Log activity for review
+      await firestore_service.FirestoreService.logProjectReviewed(project, review.reviewerName);
+      
       _setLoading(false);
       notifyListeners();
       return true;
@@ -266,7 +408,7 @@ class ProjectService extends ChangeNotifier {
     }
   }
 
-  Future<bool> updateReview(String reviewId, int rating, String comment) async {
+  Future<bool> updateReview(String reviewId, double rating, String comment) async {
     _setLoading(true);
     
     try {
@@ -283,6 +425,11 @@ class ProjectService extends ChangeNotifier {
       );
 
       await FirestoreService.saveReview(updatedReview);
+      
+      // Reload reviews for the project
+      final projectReviews = await FirestoreService.getReviewsByProjectId(updatedReview.projectId);
+      _reviews.removeWhere((r) => r.projectId == updatedReview.projectId);
+      _reviews.addAll(projectReviews);
       _reviews[reviewIndex] = updatedReview;
       
       // Update project rating
@@ -301,17 +448,28 @@ class ProjectService extends ChangeNotifier {
     }
   }
 
+  // Filter projects by status
+  List<Project> filterProjectsByStatus(ProjectStatus status) {
+    return _projects.where((project) => project.status == status).toList();
+  }
+
   Future<bool> deleteReview(String reviewId) async {
     _setLoading(true);
     
     try {
       final review = _reviews.firstWhere((r) => r.id == reviewId);
+      final projectId = review.projectId;
       await FirestoreService.deleteReview(reviewId);
+      
+      // Reload reviews for the project
+      final projectReviews = await FirestoreService.getReviewsByProjectId(projectId);
+      _reviews.removeWhere((r) => r.projectId == projectId);
+      _reviews.addAll(projectReviews);
       _reviews.removeWhere((r) => r.id == reviewId);
       
       // Update project rating
-      final project = _projects.firstWhere((p) => p.id == review.projectId);
-      final updatedRating = _calculateAverageRating(review.projectId);
+      final project = _projects.firstWhere((p) => p.id == projectId);
+      final updatedRating = _calculateAverageRating(projectId);
       final updatedProject = project.copyWith(
         rating: updatedRating,
         reviewCount: project.reviewCount - 1,
@@ -332,7 +490,7 @@ class ProjectService extends ChangeNotifier {
     final projectReviews = _reviews.where((r) => r.projectId == projectId);
     if (projectReviews.isEmpty) return 0.0;
     
-    final totalRating = projectReviews.fold<int>(0, (sum, review) => sum + review.rating);
+    final totalRating = projectReviews.fold<double>(0.0, (sum, review) => sum + review.rating);
     return totalRating / projectReviews.length;
   }
 
@@ -365,173 +523,121 @@ class ProjectService extends ChangeNotifier {
     return _bookmarkedProjectIds.contains(projectId);
   }
 
-  Future<bool> addReview(Review review) async {
+  // Storage provider: Using Firebase Storage
+
+  // Helper method to upload files to Firebase Storage
+  Future<String?> _uploadFile(String filePath, String folder, String extension) async {
+    return await _uploadFileToFirebase(filePath, folder, extension);
+  }
+
+  // Upload to Firebase Storage
+  Future<String?> _uploadFileToFirebase(String filePath, String folder, String extension) async {
+    try {
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.$extension';
+      final path = '$folder/$fileName';
+      
+      debugPrint('ProjectService: Uploading file to Firebase Storage: $path');
+      
+      final url = await FirestoreService.uploadFile(filePath, path);
+      
+      if (url != null && url.isNotEmpty) {
+        debugPrint('ProjectService: File uploaded successfully to Firebase: $url');
+      }
+      
+      return url;
+    } catch (e) {
+      debugPrint('ProjectService: Error uploading file to Firebase: $e');
+      return null;
+    }
+  }
+
+  // Create project revision - updates project and sets status back to pending
+  Future<bool> createProjectRevision(String projectId, String description, {Project? updatedProjectData}) async {
     _setLoading(true);
     
     try {
-      await FirestoreService.saveReview(review);
-      _reviews.add(review);
-      
-      // Update project rating
-      final projectIndex = _projects.indexWhere((p) => p.id == review.projectId);
-      if (projectIndex != -1) {
-        final project = _projects[projectIndex];
-        final projectReviews = _reviews.where((r) => r.projectId == project.id).toList();
-        final averageRating = projectReviews.map((r) => r.rating).reduce((a, b) => a + b) / projectReviews.length;
-        
-        _projects[projectIndex] = project.copyWith(
-          rating: averageRating,
-          reviewCount: projectReviews.length,
+      // Find the existing project
+      final existingProject = _projects.firstWhere(
+        (p) => p.id == projectId,
+        orElse: () => throw Exception('Project not found'),
+      );
+
+      // If updated project data is provided, use it; otherwise use existing project
+      var projectToUpdate = updatedProjectData ?? existingProject;
+
+      // Upload files if they are local file paths (not URLs)
+      String? pdfUrl = projectToUpdate.pdfUrl;
+      List<String> imageUrls = [];
+
+      // Check if PDF needs to be uploaded (if it's a local file path, not a URL)
+      if (projectToUpdate.pdfUrl != null && 
+          projectToUpdate.pdfUrl!.isNotEmpty &&
+          !projectToUpdate.pdfUrl!.startsWith('http://') &&
+          !projectToUpdate.pdfUrl!.startsWith('https://')) {
+        debugPrint('ProjectService: Uploading revised PDF file: ${projectToUpdate.pdfUrl}');
+        pdfUrl = await _uploadFileToFirebase(
+          projectToUpdate.pdfUrl!,
+          'projects/$projectId',
+          'pdf',
         );
-        
-        // Update in Firestore
-        await FirestoreService.saveProject(_projects[projectIndex]);
-      }
-      
-      _setLoading(false);
-      notifyListeners();
-      return true;
-    } catch (e) {
-      debugPrint('Error adding review: $e');
-      _setLoading(false);
-      return false;
-    }
-  }
-
-  List<Project> searchProjects(String query) {
-    if (query.isEmpty) return _projects;
-    
-    final lowercaseQuery = query.toLowerCase();
-    return _projects.where((project) =>
-      project.title.toLowerCase().contains(lowercaseQuery) ||
-      project.abstract.toLowerCase().contains(lowercaseQuery) ||
-      project.tags.any((tag) => tag.toLowerCase().contains(lowercaseQuery)) ||
-      project.authorName.toLowerCase().contains(lowercaseQuery)
-    ).toList();
-  }
-
-  List<Project> filterProjectsByCategory(ProjectCategory category) {
-    return _projects.where((project) => project.category == category).toList();
-  }
-
-  List<Project> filterProjectsByStatus(ProjectStatus status) {
-    return _projects.where((project) => project.status == status).toList();
-  }
-
-  Future<void> loadUserBookmarks(String userId) async {
-    try {
-      final bookmarks = await FirestoreService.getUserBookmarks(userId);
-      _bookmarkedProjectIds.clear();
-      _bookmarkedProjectIds.addAll(bookmarks);
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Error loading bookmarks: $e');
-    }
-  }
-
-  // Feedback methods
-  Future<bool> addFeedback(ProjectFeedback feedback) async {
-    _setLoading(true);
-    
-    try {
-      await FirestoreService.saveFeedback(feedback);
-      
-      // Update project with new feedback
-      final projectIndex = _projects.indexWhere((p) => p.id == feedback.projectId);
-      if (projectIndex != -1) {
-        final project = _projects[projectIndex];
-        final updatedFeedback = List<ProjectFeedback>.from(project.feedback)..add(feedback);
-        _projects[projectIndex] = project.copyWith(feedback: updatedFeedback);
-        
-        // Update in Firestore
-        await FirestoreService.saveProject(_projects[projectIndex]);
-      }
-      
-      _setLoading(false);
-      notifyListeners();
-      return true;
-    } catch (e) {
-      debugPrint('Error adding feedback: $e');
-      _setLoading(false);
-      return false;
-    }
-  }
-
-  Future<bool> markFeedbackResolved(String feedbackId, String projectId) async {
-    _setLoading(true);
-    
-    try {
-      final projectIndex = _projects.indexWhere((p) => p.id == projectId);
-      if (projectIndex != -1) {
-        final project = _projects[projectIndex];
-        final updatedFeedback = project.feedback.map((f) => 
-          f.id == feedbackId ? f.copyWith(isResolved: true) : f
-        ).toList();
-        
-        _projects[projectIndex] = project.copyWith(feedback: updatedFeedback);
-        await FirestoreService.saveProject(_projects[projectIndex]);
-      }
-      
-      _setLoading(false);
-      notifyListeners();
-      return true;
-    } catch (e) {
-      debugPrint('Error marking feedback as resolved: $e');
-      _setLoading(false);
-      return false;
-    }
-  }
-
-  // Version control methods
-  Future<bool> createProjectRevision(Project originalProject, Project revisedProject) async {
-    _setLoading(true);
-    
-    try {
-      // Create version record of original project
-      final version = ProjectVersion(
-        id: DateTime.now().millisecondsSinceEpoch.toString(),
-        projectId: originalProject.id,
-        versionNumber: originalProject.version,
-        title: originalProject.title,
-        abstract: originalProject.abstract,
-        imageUrls: originalProject.imageUrls,
-        pdfUrl: originalProject.pdfUrl,
-        githubUrl: originalProject.githubUrl,
-        createdAt: originalProject.updatedAt,
-        changeDescription: 'Original version',
-      );
-
-      // Update original project with new version
-      final updatedVersions = List<ProjectVersion>.from(originalProject.versions)..add(version);
-      final updatedOriginal = originalProject.copyWith(
-        versions: updatedVersions,
-        status: ProjectStatus.needsRevision,
-      );
-
-      // Create revised project
-      final revisedProjectWithVersion = revisedProject.copyWith(
-        id: originalProject.id, // Keep same ID
-        version: originalProject.version + 1,
-        parentProjectId: originalProject.parentProjectId ?? originalProject.id,
-        status: ProjectStatus.resubmitted,
-        createdAt: originalProject.createdAt, // Keep original creation date
-        updatedAt: DateTime.now(),
-      );
-
-      // Save both projects
-      await FirestoreService.saveProject(updatedOriginal);
-      await FirestoreService.saveProject(revisedProjectWithVersion);
-
-      // Update local list
-      final projectIndex = _projects.indexWhere((p) => p.id == originalProject.id);
-      if (projectIndex != -1) {
-        _projects[projectIndex] = revisedProjectWithVersion;
+        if (pdfUrl == null) {
+          throw Exception('Failed to upload PDF file');
+        }
       } else {
-        _projects.add(revisedProjectWithVersion);
+        // Keep existing PDF URL if it's already a URL
+        pdfUrl = projectToUpdate.pdfUrl;
       }
 
+      // Upload images if they are local file paths
+      if (projectToUpdate.imageUrls.isNotEmpty) {
+        final List<String> localPaths = [];
+        final List<String> existingUrls = [];
+        
+        for (final path in projectToUpdate.imageUrls) {
+          if (path.startsWith('http://') || path.startsWith('https://')) {
+            // Already a URL, keep it
+            existingUrls.add(path);
+          } else {
+            // Local file path, needs upload
+            localPaths.add(path);
+          }
+        }
+        
+        imageUrls.addAll(existingUrls);
+        
+        if (localPaths.isNotEmpty) {
+          debugPrint('ProjectService: Uploading ${localPaths.length} revised image(s)');
+          final uploadedUrls = await FirestoreService.uploadMultipleFiles(
+            localPaths,
+            'projects/$projectId',
+          );
+          imageUrls.addAll(uploadedUrls);
+        }
+      }
+
+      // Update project: change status to pending and preserve facultyId
+      final revisedProject = projectToUpdate.copyWith(
+        status: ProjectStatus.pending, // Change back to pending for re-approval
+        updatedAt: DateTime.now(),
+        version: existingProject.version + 1, // Increment version
+        pdfUrl: pdfUrl,
+        imageUrls: imageUrls,
+        // Preserve facultyId so it goes back to the same teacher
+        facultyId: existingProject.facultyId,
+        facultyName: existingProject.facultyName,
+      );
+
+      debugPrint('ProjectService: Creating revision for project ${projectId}');
+      debugPrint('ProjectService: Status changed from ${existingProject.status} to ${revisedProject.status}');
+      debugPrint('ProjectService: Version incremented from ${existingProject.version} to ${revisedProject.version}');
+      debugPrint('ProjectService: Preserving facultyId: ${revisedProject.facultyId}');
+      debugPrint('ProjectService: Updated title: ${revisedProject.title}');
+      debugPrint('ProjectService: Updated abstract: ${revisedProject.abstract}');
+
+      // Update the project in Firestore
+      await updateProject(revisedProject);
+      
       _setLoading(false);
-      notifyListeners();
       return true;
     } catch (e) {
       debugPrint('Error creating project revision: $e');
@@ -540,158 +646,26 @@ class ProjectService extends ChangeNotifier {
     }
   }
 
-  // Advanced Search and Filtering
-  List<Project> searchProjects(String query) {
-    if (query.isEmpty) return _projects;
-    
-    final lowerQuery = query.toLowerCase();
-    return _projects.where((project) =>
-      project.title.toLowerCase().contains(lowerQuery) ||
-      project.abstract.toLowerCase().contains(lowerQuery) ||
-      project.authorName.toLowerCase().contains(lowerQuery) ||
-      project.tags.any((tag) => tag.toLowerCase().contains(lowerQuery))
-    ).toList();
-  }
-
-  List<Project> filterProjects({
-    ProjectCategory? category,
-    ProjectStatus? status,
-    int? minYear,
-    int? maxYear,
-    double? minRating,
-    String? authorId,
-    bool? isFeatured,
-  }) {
-    return _projects.where((project) {
-      if (category != null && project.category != category) return false;
-      if (status != null && project.status != status) return false;
-      if (minYear != null && project.year < minYear) return false;
-      if (maxYear != null && project.year > maxYear) return false;
-      if (minRating != null && project.rating < minRating) return false;
-      if (authorId != null && project.authorId != authorId) return false;
-      if (isFeatured != null && project.isFeatured != isFeatured) return false;
-      return true;
-    }).toList();
-  }
-
-  List<Project> getProjectsByAuthor(String authorId) {
-    return _projects.where((p) => p.authorId == authorId).toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  }
-
-  List<Project> getRecentProjects({int limit = 10}) {
-    return _projects
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt))
-      ..take(limit);
-  }
-
-  List<Project> getTopRatedProjects({int limit = 10}) {
-    return _projects.where((p) => p.rating > 0)
-      ..sort((a, b) => b.rating.compareTo(a.rating))
-      ..take(limit);
-  }
-
-  List<Project> filterProjectsByStatus(ProjectStatus status) {
-    return _projects.where((p) => p.status == status).toList();
-  }
-
-  List<Project> getProjectVersions(String projectId) {
-    final project = _projects.firstWhere((p) => p.id == projectId);
-    return _projects.where((p) => 
-      p.id == projectId || p.parentProjectId == projectId
-    ).toList()..sort((a, b) => a.version.compareTo(b.version));
-  }
-
-  List<ProjectFeedback> getProjectFeedback(String projectId) {
-    final project = _projects.firstWhere((p) => p.id == projectId);
-    return project.feedback..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-  }
-
-  // Feedback system
-  Future<bool> addFeedback(ProjectFeedback feedback) async {
-    _setLoading(true);
-    
+  // Helper method to delete project files from Firebase Storage
+  Future<void> deleteProjectFiles(Project project) async {
     try {
-      await FirestoreService.saveFeedback(feedback);
+      // Delete PDF if exists
+      if (project.pdfUrl != null && project.pdfUrl!.isNotEmpty) {
+        await FirestoreService.deleteFile(project.pdfUrl!);
+        debugPrint('ProjectService: Deleted PDF file from Firebase');
+      }
       
-      // Update project with feedback
-      final project = _projects.firstWhere((p) => p.id == feedback.projectId);
-      final updatedProject = project.copyWith(
-        feedback: [...project.feedback, feedback],
-      );
-      
-      await updateProject(updatedProject);
-      _setLoading(false);
-      notifyListeners();
-      return true;
+      // Delete images if exist
+      for (final imageUrl in project.imageUrls) {
+        try {
+          await FirestoreService.deleteFile(imageUrl);
+          debugPrint('ProjectService: Deleted image file from Firebase');
+        } catch (e) {
+          debugPrint('ProjectService: Error deleting image: $e');
+        }
+      }
     } catch (e) {
-      debugPrint('Error adding feedback: $e');
-      _setLoading(false);
-      return false;
-    }
-  }
-
-  Future<bool> updateFeedback(ProjectFeedback feedback) async {
-    _setLoading(true);
-    
-    try {
-      await FirestoreService.saveFeedback(feedback);
-      
-      // Update project with feedback
-      final project = _projects.firstWhere((p) => p.id == feedback.projectId);
-      final updatedFeedback = project.feedback.map((f) => 
-        f.id == feedback.id ? feedback : f
-      ).toList();
-      
-      final updatedProject = project.copyWith(feedback: updatedFeedback);
-      await updateProject(updatedProject);
-      
-      _setLoading(false);
-      notifyListeners();
-      return true;
-    } catch (e) {
-      debugPrint('Error updating feedback: $e');
-      _setLoading(false);
-      return false;
-    }
-  }
-
-  Future<bool> deleteFeedback(String feedbackId, String projectId) async {
-    _setLoading(true);
-    
-    try {
-      await FirestoreService.deleteFeedback(feedbackId);
-      
-      // Update project by removing feedback
-      final project = _projects.firstWhere((p) => p.id == projectId);
-      final updatedFeedback = project.feedback.where((f) => f.id != feedbackId).toList();
-      
-      final updatedProject = project.copyWith(feedback: updatedFeedback);
-      await updateProject(updatedProject);
-      
-      _setLoading(false);
-      notifyListeners();
-      return true;
-    } catch (e) {
-      debugPrint('Error deleting feedback: $e');
-      _setLoading(false);
-      return false;
-    }
-  }
-
-  // Bookmark system
-  bool isBookmarked(String projectId) {
-    return _bookmarkedProjectIds.contains(projectId);
-  }
-
-  Future<void> loadUserBookmarks(String userId) async {
-    try {
-      final bookmarks = await FirestoreService.getUserBookmarks(userId);
-      _bookmarkedProjectIds.clear();
-      _bookmarkedProjectIds.addAll(bookmarks);
-      notifyListeners();
-    } catch (e) {
-      debugPrint('Error loading bookmarks: $e');
+      debugPrint('ProjectService: Error deleting project files: $e');
     }
   }
 
@@ -706,52 +680,45 @@ class ProjectService extends ChangeNotifier {
     return _currentUserId ?? 'anonymous';
   }
 
-  // Helper method to upload files to Firebase Storage
-  Future<String?> _uploadFile(String filePath, String folder, String extension) async {
+  // Project feedback operations
+  Future<bool> addFeedback(String projectId, String comment, feedback_models.FeedbackType type) async {
+    _setLoading(true);
+    
     try {
-      final file = File(filePath);
-      if (!await file.exists()) {
-        debugPrint('ProjectService: File does not exist: $filePath');
-        return null;
-      }
-
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}.$extension';
-      final storageRef = FirebaseStorage.instance
-          .ref()
-          .child(folder)
-          .child(fileName);
-
-      debugPrint('ProjectService: Uploading file to Firebase Storage: $fileName');
-      final uploadTask = storageRef.putFile(file);
-      final snapshot = await uploadTask;
-      final downloadUrl = await snapshot.ref.getDownloadURL();
+      // Get current user from AuthService
+      final authService = AuthService();
+      final currentUser = authService.currentUser;
+      final reviewerName = currentUser?.name ?? 'Unknown User';
+      final reviewerId = currentUser?.id ?? _getCurrentUserId();
       
-      debugPrint('ProjectService: File uploaded successfully: $downloadUrl');
-      return downloadUrl;
+      final feedback = feedback_models.ProjectFeedback(
+        id: 'feedback_${DateTime.now().millisecondsSinceEpoch}',
+        projectId: projectId,
+        reviewerId: reviewerId,
+        reviewerName: reviewerName,
+        comment: comment,
+        type: type,
+        createdAt: DateTime.now(),
+      );
+      
+      await FirestoreService.saveFeedback(feedback);
+      _setLoading(false);
+      return true;
     } catch (e) {
-      debugPrint('ProjectService: Error uploading file: $e');
-      return null;
+      debugPrint('Error adding feedback: $e');
+      _setLoading(false);
+      return false;
     }
   }
 
-  // Method to delete files from Firebase Storage
-  Future<void> deleteProjectFiles(Project project) async {
+  Future<void> loadUserBookmarks(String userId) async {
     try {
-      // Delete PDF if exists
-      if (project.pdfUrl != null && project.pdfUrl!.isNotEmpty) {
-        final pdfRef = FirebaseStorage.instance.refFromURL(project.pdfUrl!);
-        await pdfRef.delete();
-      }
-
-      // Delete images if exist
-      for (final imageUrl in project.imageUrls) {
-        if (imageUrl.isNotEmpty) {
-          final imageRef = FirebaseStorage.instance.refFromURL(imageUrl);
-          await imageRef.delete();
-        }
-      }
+      final bookmarks = await FirestoreService.getUserBookmarks(userId);
+      _bookmarkedProjectIds.clear();
+      _bookmarkedProjectIds.addAll(bookmarks);
+      notifyListeners();
     } catch (e) {
-      debugPrint('ProjectService: Error deleting files: $e');
+      debugPrint('Error loading bookmarks: $e');
     }
   }
 }
