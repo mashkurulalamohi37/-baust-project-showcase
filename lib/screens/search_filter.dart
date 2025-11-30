@@ -106,22 +106,25 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
               
               // Filter Row
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
                   Expanded(
                     child: DropdownButtonFormField<ProjectCategory>(
                       decoration: const InputDecoration(
                         labelText: 'Category',
                         border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
+                      isExpanded: true,
                       value: _selectedCategory,
                       items: [
                         const DropdownMenuItem<ProjectCategory>(
                           value: null,
-                          child: Text('All Categories'),
+                          child: Text('All Categories', overflow: TextOverflow.ellipsis),
                         ),
                         ...ProjectCategory.values.map((category) => DropdownMenuItem(
                           value: category,
-                          child: Text(category.displayName),
+                          child: Text(category.displayName, overflow: TextOverflow.ellipsis),
                         )),
                       ],
                       onChanged: (ProjectCategory? value) {
@@ -135,18 +138,20 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
                       decoration: const InputDecoration(
                         labelText: 'Year',
                         border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       ),
+                      isExpanded: true,
                       value: _selectedYear,
                       items: [
                         const DropdownMenuItem<int>(
                           value: null,
-                          child: Text('All Years'),
+                          child: Text('All Years', overflow: TextOverflow.ellipsis),
                         ),
                         ...List.generate(8, (int i) {
                           final int year = DateTime.now().year - i;
                           return DropdownMenuItem<int>(
                             value: year,
-                            child: Text(year.toString()),
+                            child: Text(year.toString(), overflow: TextOverflow.ellipsis),
                           );
                         }),
                       ],
@@ -272,18 +277,17 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
                       children: <Widget>[
                         Text(project.abstract, maxLines: 2, overflow: TextOverflow.ellipsis),
                         const SizedBox(height: 4),
-                        Row(
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 4,
                           children: <Widget>[
                             Chip(
                               label: Text(project.category.displayName),
                               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            const SizedBox(width: 8),
                             Text('${project.year}'),
-                            if (project.facultyName != null) ...[
-                              const SizedBox(width: 8),
-                              Text('• ${project.facultyName}'),
-                            ],
+                            if (project.facultyName != null)
+                              Text('• ${project.facultyName}', overflow: TextOverflow.ellipsis),
                           ],
                         ),
                         const SizedBox(height: 4),
@@ -291,9 +295,19 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
                           children: <Widget>[
                             const Icon(Icons.star, size: 16, color: Colors.amber),
                             const SizedBox(width: 4),
-                            Text('${project.rating.toStringAsFixed(1)} (${project.reviewCount})'),
+                            Flexible(
+                              child: Text(
+                                '${project.rating.toStringAsFixed(1)} (${project.reviewCount})',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                             const SizedBox(width: 16),
-                            Text('By ${project.authorName}'),
+                            Flexible(
+                              child: Text(
+                                'By ${project.authorName}',
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -308,6 +322,8 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
                                 : Icons.bookmark_border,
                           ),
                           onPressed: () => _projectService.toggleBookmark(project.id),
+                          constraints: const BoxConstraints(),
+                          padding: const EdgeInsets.all(8),
                         ),
                         const Icon(Icons.chevron_right),
                       ],
