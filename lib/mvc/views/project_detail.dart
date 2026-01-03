@@ -77,7 +77,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     if (success && mounted) {
       _commentController.clear();
       _ratingController.clear();
-      _rating = 0.0;
+      setState(() => _rating = 0.0);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Review submitted successfully!')),
       );
@@ -171,11 +171,14 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     if (project.supervisor != null && project.supervisor!.isNotEmpty) ...[
                       Row(
                         children: [
-                          Icon(Icons.school, size: 16, color: Colors.grey[600]),
+                          const Icon(Icons.school, size: 16, color: Colors.blue),
                           const SizedBox(width: 4),
                           Text(
                             'Supervisor: ${project.supervisor}',
-                            style: TextStyle(color: Colors.grey[600]),
+                            style: TextStyle(
+                              color: Colors.blue[700],
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
                       ),
@@ -184,11 +187,26 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     if (project.facultyName != null && project.facultyName!.isNotEmpty) ...[
                       Row(
                         children: [
-                          Icon(Icons.verified_user, size: 16, color: Colors.grey[600]),
+                          Icon(
+                            project.status == ProjectStatus.approved
+                                ? Icons.verified
+                                : Icons.person,
+                            size: 16,
+                            color: project.status == ProjectStatus.approved
+                                ? Colors.green
+                                : Colors.orange,
+                          ),
                           const SizedBox(width: 4),
                           Text(
-                            'Accepted by: ${project.facultyName}',
-                            style: TextStyle(color: Colors.grey[600]),
+                            project.status == ProjectStatus.approved
+                                ? 'Approved by: ${project.facultyName}'
+                                : 'Assigned to: ${project.facultyName}',
+                            style: TextStyle(
+                              color: project.status == ProjectStatus.approved
+                                  ? Colors.green[700]
+                                  : Colors.orange[700],
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                         ],
                       ),
@@ -303,22 +321,31 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               ...widget.projectService.getReviewsForProject(project.id).map((review) => Card(
                 margin: const EdgeInsets.symmetric(vertical: 4),
                 child: ListTile(
-                  leading: const Icon(Icons.person_outline),
-                  title: Text(review.reviewerName ?? 'Unknown Reviewer'),
-                  subtitle: Column(
+                  leading: CircleAvatar(
+                    child: Text(review.reviewerName?[0].toUpperCase() ?? 'R'),
+                  ),
+                  title: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      if (review.rating > 0) Row(
-                        children: [
-                          Icon(Icons.star, color: Colors.amber, size: 16),
-                          Text(' ${review.rating}')
-                        ],
-                      ),
+                      Text(review.reviewerName ?? 'Unknown Reviewer'),
                       const SizedBox(height: 4),
-                      Text(review.comment),
+                      Row(
+                        children: List.generate(5, (index) => Icon(
+                          index < review.rating.round() ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                          size: 18,
+                        )),
+                      ),
                     ],
                   ),
-                  dense: true,
+                  subtitle: Padding(
+                    padding: const EdgeInsets.only(top: 8),
+                    child: Text(review.comment),
+                  ),
+                  trailing: Text(
+                    '${review.createdAt.day}/${review.createdAt.month}/${review.createdAt.year}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
                 ),
               )),
           ],

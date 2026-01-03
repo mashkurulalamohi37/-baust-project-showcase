@@ -5,6 +5,7 @@ import '../mvc/models/feedback.dart' as feedback_models;
 import '../mvc/controllers/project_service.dart';
 import '../mvc/controllers/auth_service.dart';
 import 'project_detail.dart';
+import 'semester_archive_new.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   const TeacherDashboardScreen({super.key});
@@ -22,6 +23,22 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   void initState() {
     super.initState();
     _projectService.reloadProjects();
+    _authService.addListener(_onAuthChanged);
+    _onAuthChanged();
+  }
+
+  @override
+  void dispose() {
+    _authService.removeListener(_onAuthChanged);
+    super.dispose();
+  }
+
+  void _onAuthChanged() {
+    final user = _authService.currentUser;
+    if (user != null) {
+      _projectService.loadReviewsForUser(user.id);
+    }
+    if (mounted) setState(() {});
   }
 
   @override
@@ -68,7 +85,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         ],
       ),
       body: AnimatedBuilder(
-        animation: _projectService,
+        animation: Listenable.merge([_projectService, _authService]),
         builder: (context, child) {
           if (_projectService.isLoading) {
             return const Center(child: CircularProgressIndicator());
@@ -81,6 +98,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
               _AllProjectsTab(projectService: _projectService, authService: _authService),
               _MyReviewsTab(projectService: _projectService, authService: _authService),
               _AnalyticsTab(projectService: _projectService, authService: _authService),
+              const SemesterArchiveScreen(),
             ],
           );
         },
@@ -108,6 +126,11 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             icon: Icon(Icons.analytics_outlined),
             selectedIcon: Icon(Icons.analytics),
             label: 'Analytics',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.archive_outlined),
+            selectedIcon: Icon(Icons.archive),
+            label: 'Archives',
           ),
         ],
       ),
@@ -326,6 +349,14 @@ class _AllProjectsTab extends StatefulWidget {
 
 class _AllProjectsTabState extends State<_AllProjectsTab> {
   String _selectedFilter = 'All'; // 'All', 'Pending', 'Approved', 'Featured'
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -335,16 +366,27 @@ class _AllProjectsTabState extends State<_AllProjectsTab> {
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-    // Filter projects based on selected filter
-    final filteredProjects = _selectedFilter == 'All'
-        ? allProjects
-        : _selectedFilter == 'Pending'
-            ? allProjects.where((p) => p.status == ProjectStatus.pending).toList()
-            : _selectedFilter == 'Approved'
-                ? allProjects.where((p) => p.status == ProjectStatus.approved).toList()
-                : _selectedFilter == 'Featured'
-                    ? allProjects.where((p) => p.isFeatured || p.status == ProjectStatus.featured).toList()
-                    : allProjects;
+    // Filter projects based on selected filter and search query
+    final filteredProjects = allProjects.where((project) {
+      // Status filter
+      final matchesStatus = _selectedFilter == 'All'
+          ? true
+          : _selectedFilter == 'Pending'
+              ? project.status == ProjectStatus.pending
+              : _selectedFilter == 'Approved'
+                  ? project.status == ProjectStatus.approved
+                  : _selectedFilter == 'Featured'
+                      ? (project.isFeatured || project.status == ProjectStatus.featured)
+                      : true;
+
+      // Search filter
+      final matchesSearch = _searchQuery.isEmpty ||
+          project.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          project.authorName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+          (project.studentId?.toLowerCase().contains(_searchQuery.toLowerCase()) ?? false);
+
+      return matchesStatus && matchesSearch;
+    }).toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -371,7 +413,7 @@ class _AllProjectsTabState extends State<_AllProjectsTab> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${filteredProjects.length} project${filteredProjects.length == 1 ? '' : 's'} available for review',
+                  '${filteredProjects.length} project${filteredProjects.length == 1 ? '' : 's'} found',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
                   ),
@@ -380,7 +422,28 @@ class _AllProjectsTabState extends State<_AllProjectsTab> {
             ),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+
+        // Search Bar
+        TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: 'Search by title, student name, or ID',
+            prefixIcon: const Icon(Icons.search),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            filled: true,
+            fillColor: Theme.of(context).cardColor,
+          ),
+          onChanged: (value) {
+            setState(() {
+              _searchQuery = value;
+            });
+          },
+        ),
+        const SizedBox(height: 16),
 
         // Filter Chips
         SingleChildScrollView(
@@ -439,13 +502,25 @@ class _AllProjectsTabState extends State<_AllProjectsTab> {
               child: Center(
                 child: Column(
                   children: [
-                    Icon(Icons.folder_open, size: 48, color: Colors.grey),
+                    Icon(
+                      _searchQuery.isNotEmpty ? Icons.search_off : Icons.folder_open,
+                      size: 48, 
+                      color: Colors.grey
+                    ),
                     const SizedBox(height: 8),
-                    Text('No ${_selectedFilter.toLowerCase()} projects'),
+                    Text(
+                      _searchQuery.isNotEmpty 
+                        ? 'No results found for "$_searchQuery"'
+                        : 'No ${_selectedFilter.toLowerCase()} projects'
+                    ),
                     const SizedBox(height: 4),
-                    Text(_selectedFilter == 'All' 
-                        ? 'Students haven\'t uploaded any projects yet'
-                        : 'No projects with ${_selectedFilter.toLowerCase()} status'),
+                    Text(
+                        _searchQuery.isNotEmpty
+                          ? 'Try different keywords'
+                          : _selectedFilter == 'All' 
+                            ? 'Students haven\'t uploaded any projects yet'
+                            : 'No projects with ${_selectedFilter.toLowerCase()} status'
+                    ),
                   ],
                 ),
               ),
@@ -552,6 +627,7 @@ class _MyReviewsTab extends StatelessWidget {
                 authorName: 'Unknown',
                 category: ProjectCategory.other,
                 year: DateTime.now().year,
+                semester: Semester.summer,
                 createdAt: DateTime.now(),
                 updatedAt: DateTime.now(),
                 status: ProjectStatus.draft,
@@ -1027,6 +1103,8 @@ class _ProjectReviewCard extends StatelessWidget {
 
   Color _getStatusColor(ProjectStatus status) {
     switch (status) {
+      case ProjectStatus.hidden:
+        return Colors.grey.shade400;
       case ProjectStatus.draft:
         return Colors.grey;
       case ProjectStatus.pending:

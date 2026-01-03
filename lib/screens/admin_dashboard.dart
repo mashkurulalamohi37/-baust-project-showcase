@@ -4,6 +4,7 @@ import '../mvc/models/user.dart';
 import '../mvc/controllers/project_service.dart';
 import '../mvc/controllers/auth_service.dart';
 import 'project_detail.dart';
+import 'semester_archive_new.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -80,6 +81,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               _UserManagementTab(projectService: _projectService, authService: _authService),
               _ProjectManagementTab(projectService: _projectService, authService: _authService),
               _SystemSettingsTab(projectService: _projectService, authService: _authService),
+              const SemesterArchiveScreen(),
             ],
           );
         },
@@ -107,6 +109,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             icon: Icon(Icons.settings_outlined),
             selectedIcon: Icon(Icons.settings),
             label: 'Settings',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.archive_outlined),
+            selectedIcon: Icon(Icons.archive),
+            label: 'Archives',
           ),
         ],
       ),
@@ -324,6 +331,8 @@ class _UserManagementTab extends StatefulWidget {
 
 class _UserManagementTabState extends State<_UserManagementTab> {
   String _selectedFilter = 'All';
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
 
   @override
   void initState() {
@@ -335,12 +344,13 @@ class _UserManagementTabState extends State<_UserManagementTab> {
   @override
   void dispose() {
     widget.authService.removeListener(_onAuthServiceChanged);
+    _searchController.dispose();
     super.dispose();
   }
 
   void _onAuthServiceChanged() {
     // Refresh the current view when auth service changes
-    setState(() {});
+    if (mounted) setState(() {});
   }
 
   @override
@@ -380,7 +390,28 @@ class _UserManagementTabState extends State<_UserManagementTab> {
             ),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+
+        // Search Bar
+        TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: 'Search by name or email',
+            prefixIcon: const Icon(Icons.search),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            filled: true,
+            fillColor: Theme.of(context).cardColor,
+          ),
+          onChanged: (value) {
+            setState(() {
+              _searchQuery = value;
+            });
+          },
+        ),
+        const SizedBox(height: 16),
 
         // Filter Tabs
         SingleChildScrollView(
@@ -417,23 +448,61 @@ class _UserManagementTabState extends State<_UserManagementTab> {
 
         // Users List
         if (_selectedFilter == 'Pending')
-          _PendingTeachersSection(authService: widget.authService)
+          _PendingTeachersSection(
+            authService: widget.authService,
+            searchQuery: _searchQuery, // Pass search query down
+          )
         else
-          _AllUsersSection(filter: _selectedFilter, authService: widget.authService),
+          _AllUsersSection(
+            filter: _selectedFilter,
+            authService: widget.authService,
+            searchQuery: _searchQuery, // Pass search query down
+          ),
       ],
     );
   }
 }
 
-class _ProjectManagementTab extends StatelessWidget {
+class _ProjectManagementTab extends StatefulWidget {
   const _ProjectManagementTab({required this.projectService, required this.authService});
   final ProjectService projectService;
   final AuthService authService;
 
   @override
+  State<_ProjectManagementTab> createState() => _ProjectManagementTabState();
+}
+
+class _ProjectManagementTabState extends State<_ProjectManagementTab> {
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  Semester? _selectedSemester;
+  int? _selectedYear;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final allProjects = List<Project>.from(projectService.projects)
+    final allProjects = List<Project>.from(widget.projectService.projects)
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    
+    // Get unique years from projects for filter
+    final years = allProjects.map((p) => p.year).toSet().toList()..sort((a, b) => b.compareTo(a));
+    if (years.isEmpty) years.add(DateTime.now().year); // Default if empty
+
+    final filteredProjects = allProjects.where((project) {
+      if (_selectedSemester != null && project.semester != _selectedSemester) return false;
+      if (_selectedYear != null && project.year != _selectedYear) return false;
+
+      if (_searchQuery.isEmpty) return true;
+      final query = _searchQuery.toLowerCase();
+      return project.title.toLowerCase().contains(query) ||
+             project.authorName.toLowerCase().contains(query) ||
+             (project.studentId?.toLowerCase().contains(query) ?? false);
+    }).toList();
 
     return ListView(
       padding: const EdgeInsets.all(16),
@@ -460,7 +529,7 @@ class _ProjectManagementTab extends StatelessWidget {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  '${allProjects.length} project${allProjects.length == 1 ? '' : 's'} in the system',
+                  'Manage projects, assign awards, and filter by semester',
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                     color: Theme.of(context).colorScheme.onSecondaryContainer.withOpacity(0.8),
                   ),
@@ -469,37 +538,108 @@ class _ProjectManagementTab extends StatelessWidget {
             ),
           ),
         ),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
+
+        // Search Bar
+        TextField(
+          controller: _searchController,
+          decoration: InputDecoration(
+            hintText: 'Search by title, author, or student ID',
+            prefixIcon: const Icon(Icons.search),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            filled: true,
+            fillColor: Theme.of(context).cardColor,
+          ),
+          onChanged: (value) {
+            setState(() {
+              _searchQuery = value;
+            });
+          },
+        ),
+        const SizedBox(height: 16),
+        
+        // Filters
+        Row(
+          children: [
+            Expanded(
+              child: DropdownButtonFormField<Semester>(
+                decoration: InputDecoration(
+                  labelText: 'Semester',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                value: _selectedSemester,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('All Semesters')),
+                  ...Semester.values.map((s) => DropdownMenuItem(value: s, child: Text(s.displayName))),
+                ],
+                onChanged: (value) => setState(() => _selectedSemester = value),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: DropdownButtonFormField<int>(
+                decoration: InputDecoration(
+                  labelText: 'Year',
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                ),
+                value: _selectedYear,
+                items: [
+                  const DropdownMenuItem(value: null, child: Text('All Years')),
+                  ...years.map((y) => DropdownMenuItem(value: y, child: Text(y.toString()))),
+                ],
+                onChanged: (value) => setState(() => _selectedYear = value),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
 
         // Projects List
-        if (allProjects.isEmpty)
-          const Card(
+        if (filteredProjects.isEmpty)
+          Card(
             child: Padding(
-              padding: EdgeInsets.all(32),
+              padding: const EdgeInsets.all(32),
               child: Center(
                 child: Column(
                   children: [
-                    Icon(Icons.folder_open, size: 48, color: Colors.grey),
-                    SizedBox(height: 8),
-                    Text('No projects found'),
-                    SizedBox(height: 4),
-                    Text('Students haven\'t uploaded any projects yet'),
+                    Icon(
+                      _searchQuery.isNotEmpty || _selectedSemester != null || _selectedYear != null 
+                        ? Icons.search_off 
+                        : Icons.folder_open, 
+                      size: 48, 
+                      color: Colors.grey
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _searchQuery.isNotEmpty || _selectedSemester != null || _selectedYear != null 
+                        ? 'No results found' 
+                        : 'No projects found'
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Try adjusting your filters or search terms'
+                    ),
                   ],
                 ),
               ),
             ),
           )
         else
-          ...allProjects.map((project) => _AdminProjectCard(
+          ...filteredProjects.map((project) => _AdminProjectCard(
                 project: project,
-                projectService: projectService,
-                authService: authService,
+                projectService: widget.projectService,
+                authService: widget.authService,
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => ProjectDetailScreen(
                       project: project,
-                      projectService: projectService,
-                      authService: authService,
+                      projectService: widget.projectService,
+                      authService: widget.authService,
                     ),
                   ),
                 ),
@@ -803,8 +943,12 @@ class _FilterChip extends StatelessWidget {
 }
 
 class _PendingTeachersSection extends StatefulWidget {
-  const _PendingTeachersSection({required this.authService});
+  const _PendingTeachersSection({
+    required this.authService,
+    this.searchQuery = '',
+  });
   final AuthService authService;
+  final String searchQuery;
 
   @override
   State<_PendingTeachersSection> createState() => _PendingTeachersSectionState();
@@ -818,6 +962,14 @@ class _PendingTeachersSectionState extends State<_PendingTeachersSection> {
   void initState() {
     super.initState();
     _loadPendingTeachers();
+  }
+
+  @override
+  void didUpdateWidget(_PendingTeachersSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.searchQuery != oldWidget.searchQuery) {
+      setState(() {});
+    }
   }
 
   Future<void> _loadPendingTeachers() async {
@@ -866,25 +1018,35 @@ class _PendingTeachersSectionState extends State<_PendingTeachersSection> {
                   child: CircularProgressIndicator(),
                 ),
               )
-            else if (_pendingTeachers.isEmpty)
-              const Card(
+            else if (_pendingTeachers.where((t) => widget.searchQuery.isEmpty || 
+                    t.name.toLowerCase().contains(widget.searchQuery.toLowerCase()) || 
+                    t.email.toLowerCase().contains(widget.searchQuery.toLowerCase())).isEmpty)
+              Card(
                 child: Padding(
-                  padding: EdgeInsets.all(32),
+                  padding: const EdgeInsets.all(32),
                   child: Center(
                     child: Column(
                       children: [
-                        Icon(Icons.check_circle_outline, size: 48, color: Colors.grey),
-                        SizedBox(height: 8),
-                        Text('No pending approvals'),
-                        SizedBox(height: 4),
-                        Text('All teachers have been approved'),
+                        const Icon(Icons.check_circle_outline, size: 48, color: Colors.grey),
+                        const SizedBox(height: 8),
+                        Text(widget.searchQuery.isNotEmpty 
+                            ? 'No results found' 
+                            : 'No pending approvals'),
+                        const SizedBox(height: 4),
+                        Text(widget.searchQuery.isNotEmpty 
+                            ? 'Try different keywords' 
+                            : 'All teachers have been approved'),
                       ],
                     ),
                   ),
                 ),
               )
             else
-              ..._pendingTeachers.map((teacher) => _TeacherApprovalCard(
+              ..._pendingTeachers
+                  .where((t) => widget.searchQuery.isEmpty || 
+                      t.name.toLowerCase().contains(widget.searchQuery.toLowerCase()) || 
+                      t.email.toLowerCase().contains(widget.searchQuery.toLowerCase()))
+                  .map((teacher) => _TeacherApprovalCard(
                     teacher: teacher,
                     onApprove: () => _approveTeacher(context, teacher),
                     onReject: () => _rejectTeacher(context, teacher),
@@ -957,9 +1119,14 @@ class _PendingTeachersSectionState extends State<_PendingTeachersSection> {
 }
 
 class _AllUsersSection extends StatefulWidget {
-  const _AllUsersSection({required this.filter, required this.authService});
+  const _AllUsersSection({
+    required this.filter, 
+    required this.authService,
+    this.searchQuery = '',
+  });
   final String filter;
   final AuthService authService;
+  final String searchQuery;
 
   @override
   State<_AllUsersSection> createState() => _AllUsersSectionState();
@@ -973,6 +1140,18 @@ class _AllUsersSectionState extends State<_AllUsersSection> {
   void initState() {
     super.initState();
     _loadUsers();
+  }
+
+  @override
+  void didUpdateWidget(_AllUsersSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.searchQuery != oldWidget.searchQuery || widget.filter != oldWidget.filter) {
+      if (widget.filter != oldWidget.filter) {
+         _loadUsers();
+      } else {
+         setState(() {});
+      }
+    }
   }
 
   Future<void> _loadUsers() async {
@@ -1027,7 +1206,9 @@ class _AllUsersSectionState extends State<_AllUsersSection> {
                   child: CircularProgressIndicator(),
                 ),
               )
-            else if (_users.isEmpty)
+            else if (_users.where((u) => widget.searchQuery.isEmpty || 
+                    u.name.toLowerCase().contains(widget.searchQuery.toLowerCase()) || 
+                    u.email.toLowerCase().contains(widget.searchQuery.toLowerCase())).isEmpty)
               const Center(
                 child: Padding(
                   padding: EdgeInsets.all(32),
@@ -1041,7 +1222,11 @@ class _AllUsersSectionState extends State<_AllUsersSection> {
                 ),
               )
             else
-              ..._users.map((user) => _UserManagementCard(
+              ..._users
+                  .where((u) => widget.searchQuery.isEmpty || 
+                      u.name.toLowerCase().contains(widget.searchQuery.toLowerCase()) || 
+                      u.email.toLowerCase().contains(widget.searchQuery.toLowerCase()))
+                  .map((user) => _UserManagementCard(
                 user: user,
                 onStatusChange: () => _loadUsers(),
                 onRoleChange: () => _loadUsers(),
@@ -1284,6 +1469,12 @@ class _AdminProjectCard extends StatelessWidget {
                         case 'feature':
                           _featureProject(context, project);
                           break;
+                        case 'award':
+                          _assignAward(context, project);
+                          break;
+                        case 'hide':
+                          _toggleProjectVisibility(context, project);
+                          break;
                       }
                     },
                     itemBuilder: (context) => [
@@ -1294,6 +1485,26 @@ class _AdminProjectCard extends StatelessWidget {
                             Icon(Icons.star),
                             SizedBox(width: 8),
                             Text('Feature'),
+                          ],
+                        ),
+                      ),
+                      const PopupMenuItem(
+                         value: 'award',
+                         child: Row(
+                           children: [
+                             Icon(Icons.emoji_events, color: Colors.amber),
+                             SizedBox(width: 8),
+                             Text('Assign Award'),
+                           ],
+                         ),
+                       ),
+                      PopupMenuItem(
+                        value: 'hide',
+                        child: Row(
+                          children: [
+                            Icon(project.status == ProjectStatus.hidden ? Icons.visibility : Icons.visibility_off),
+                            const SizedBox(width: 8),
+                            Text(project.status == ProjectStatus.hidden ? 'Unhide' : 'Hide'),
                           ],
                         ),
                       ),
@@ -1366,6 +1577,80 @@ class _AdminProjectCard extends StatelessWidget {
     }
   }
 
+  void _assignAward(BuildContext context, Project project) {
+     showDialog(
+      context: context,
+      builder: (context) {
+        ProjectAward? selectedAward = project.award;
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Assign Award'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: ProjectAward.values.map((award) {
+                  return RadioListTile<ProjectAward>(
+                    title: Text(award == ProjectAward.none ? 'None' : award.displayName),
+                    value: award,
+                    groupValue: selectedAward,
+                    onChanged: (value) {
+                      setState(() => selectedAward = value);
+                    },
+                  );
+                }).toList(),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                FilledButton(
+                  onPressed: () async {
+                    if (selectedAward != null) {
+                       Navigator.pop(context);
+                       await projectService.updateProjectAward(project.id, selectedAward!);
+                       if (context.mounted) {
+                         ScaffoldMessenger.of(context).showSnackBar(
+                           SnackBar(content: Text('Award updated for ${project.title}')),
+                         );
+                       }
+                    }
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          }
+        );
+      },
+    );
+  }
+
+  void _toggleProjectVisibility(BuildContext context, Project project) async {
+    final newStatus = project.status == ProjectStatus.hidden 
+        ? ProjectStatus.approved // Default to approved when unhiding
+        : ProjectStatus.hidden;
+        
+    final admin = authService.currentUser;
+    final updatedProject = project.copyWith(status: newStatus);
+    
+    final success = await projectService.updateProject(
+      updatedProject,
+      approverId: admin?.id,
+      approverName: admin?.name,
+    );
+    
+    if (success && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(
+          newStatus == ProjectStatus.hidden 
+              ? '${project.title} is now hidden' 
+              : '${project.title} is now visible'
+        )),
+      );
+    }
+  }
+
   Color _getStatusColor(ProjectStatus status) {
     switch (status) {
       case ProjectStatus.draft:
@@ -1382,6 +1667,8 @@ class _AdminProjectCard extends StatelessWidget {
         return Colors.amber;
       case ProjectStatus.resubmitted:
         return Colors.blue;
+      case ProjectStatus.hidden:
+        return Colors.grey.shade400;
     }
   }
 }

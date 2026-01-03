@@ -30,6 +30,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   bool _isSubmitting = false;
 
   @override
+  void initState() {
+    super.initState();
+    // Load reviews for this project
+    widget.projectService.loadReviewsForProject(widget.project.id);
+  }
+
+  @override
   void dispose() {
     _commentController.dispose();
     _ratingController.dispose();
@@ -89,25 +96,39 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   @override
   Widget build(BuildContext context) {
     final project = widget.project;
-    final isBookmarked = widget.projectService.isBookmarked(project.id);
-    final projectReviews = widget.projectService.reviews
-        .where((r) => r.projectId == project.id)
-        .toList();
 
     return Scaffold(
       appBar: AppBar(
         title: Text(project.title),
         actions: <Widget>[
-          IconButton(
-            icon: Icon(isBookmarked ? Icons.bookmark : Icons.bookmark_border),
-            onPressed: () => widget.projectService.toggleBookmark(project.id),
+          AnimatedBuilder(
+            animation: widget.projectService,
+            builder: (context, child) {
+              final isBookmarked = widget.projectService.isBookmarked(project.id);
+              return IconButton(
+                icon: Icon(isBookmarked ? Icons.bookmark : Icons.bookmark_border),
+                onPressed: () => widget.projectService.toggleBookmark(project.id),
+              );
+            },
           ),
         ],
       ),
-      body: AnimatedBuilder(
-        animation: widget.projectService,
-        builder: (context, child) {
-          return ListView(
+      body: Column(
+        children: [
+          Expanded(
+            child: AnimatedBuilder(
+              animation: widget.projectService,
+              builder: (context, child) {
+                // Get most up-to-date project data from service
+                final currentProject = widget.projectService.projects
+                    .firstWhere((p) => p.id == project.id, orElse: () => project);
+                    
+                final isBookmarked = widget.projectService.isBookmarked(currentProject.id);
+                final projectReviews = widget.projectService.reviews
+                    .where((r) => r.projectId == currentProject.id)
+                    .toList();
+
+                return ListView(
             padding: const EdgeInsets.all(16),
             children: <Widget>[
               // Project Header
@@ -121,15 +142,15 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                         children: <Widget>[
                           Expanded(
                             child: Text(
-                              project.title,
+                              currentProject.title,
                               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                 fontWeight: FontWeight.bold,
                               ),
                             ),
                           ),
                           Chip(
-                            label: Text(project.status.displayName),
-                            backgroundColor: _getStatusColor(project.status, context),
+                            label: Text(currentProject.status.displayName),
+                            backgroundColor: _getStatusColor(currentProject.status, context),
                           ),
                         ],
                       ),
@@ -138,11 +159,57 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                         children: <Widget>[
                           const Icon(Icons.star, size: 16, color: Colors.amber),
                           const SizedBox(width: 4),
-                          Text('${project.rating.toStringAsFixed(1)} (${project.reviewCount} reviews)'),
+                          Text('${currentProject.rating.toStringAsFixed(1)} (${currentProject.reviewCount} reviews)'),
                           const SizedBox(width: 16),
-                          Text('By ${project.authorName}'),
+                          Text('By ${currentProject.authorName}'),
                         ],
                       ),
+                      // Show supervisor info if available
+                      if (currentProject.supervisor != null && currentProject.supervisor!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            const Icon(Icons.school, size: 16, color: Colors.blue),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Supervisor: ${currentProject.supervisor}',
+                              style: TextStyle(
+                                color: Colors.blue[700],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                      // Show faculty (approver) info if available
+                      if (currentProject.facultyName != null && currentProject.facultyName!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(
+                              currentProject.status == ProjectStatus.approved
+                                  ? Icons.verified
+                                  : Icons.person,
+                              size: 16,
+                              color: currentProject.status == ProjectStatus.approved
+                                  ? Colors.green
+                                  : Colors.orange,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              currentProject.status == ProjectStatus.approved
+                                  ? 'Approved by: ${currentProject.facultyName}'
+                                  : 'Assigned to: ${currentProject.facultyName}',
+                              style: TextStyle(
+                                color: currentProject.status == ProjectStatus.approved
+                                    ? Colors.green[700]
+                                    : Colors.orange[700],
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -152,37 +219,37 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               // Abstract
               Text('Abstract', style: Theme.of(context).textTheme.titleMedium),
               const SizedBox(height: 8),
-              Text(project.abstract),
+              Text(currentProject.abstract),
               const SizedBox(height: 16),
 
               // Project Images Gallery
-              if (project.imageUrls.isNotEmpty) ...[
+              if (currentProject.imageUrls.isNotEmpty) ...[
                 Text('Project Images', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
-                _buildImageGallery(project.imageUrls),
+                _buildImageGallery(currentProject.imageUrls),
                 const SizedBox(height: 16),
               ],
 
               // Version History
-              if (project.versions.isNotEmpty) ...[
+              if (currentProject.versions.isNotEmpty) ...[
                 Text('Version History', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
-                _buildVersionHistory(project),
+                _buildVersionHistory(currentProject),
                 const SizedBox(height: 16),
               ],
 
               // Feedback Section
-              if (project.feedback.isNotEmpty) ...[
+              if (currentProject.feedback.isNotEmpty) ...[
                 Text('Teacher Feedback', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
-                _buildFeedbackSection(project),
+                _buildFeedbackSection(currentProject),
                 const SizedBox(height: 16),
               ],
 
               // Revision Upload (for students with projects that need revision)
               if (widget.authService?.currentUser?.role == UserRole.student && 
-                  project.status == ProjectStatus.needsRevision) ...[
-                _buildRevisionUploadSection(project),
+                  currentProject.status == ProjectStatus.needsRevision) ...[
+                _buildRevisionUploadSection(currentProject),
                 const SizedBox(height: 16),
               ],
               
@@ -190,42 +257,211 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               Wrap(
                 spacing: 8,
                 children: <Widget>[
-                  Chip(label: Text(project.category.displayName)),
-                  Chip(label: Text(project.year.toString())),
-                if (project.facultyName != null && project.facultyName!.isNotEmpty)
+                  Chip(label: Text(currentProject.category.displayName)),
+                  Chip(label: Text(currentProject.year.toString())),
+                if (currentProject.facultyName != null && currentProject.facultyName!.isNotEmpty)
                   Chip(
                     label: Text(
-                      project.status == ProjectStatus.approved
-                          ? 'Approved by: ${project.facultyName}'
-                          : 'Supervisor: ${project.facultyName}',
+                      currentProject.status == ProjectStatus.approved
+                          ? 'Approved by: ${currentProject.facultyName}'
+                          : 'Supervisor: ${currentProject.facultyName}',
                     ),
                   ),
                 ],
               ),
               const SizedBox(height: 16),
               
+              // Project Type & Team Type Badges
+              Row(
+                children: [
+                  Chip(
+                    avatar: Icon(
+                      currentProject.projectType == ProjectType.thesis ? Icons.school : Icons.assignment,
+                      size: 18,
+                      color: currentProject.projectType == ProjectType.thesis
+                          ? Colors.purple[900]
+                          : Colors.blue[900],
+                    ),
+                    label: Text(
+                      currentProject.projectType.displayName,
+                      style: TextStyle(
+                        color: currentProject.projectType == ProjectType.thesis
+                            ? Colors.purple[900]
+                            : Colors.blue[900],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    backgroundColor: currentProject.projectType == ProjectType.thesis
+                        ? Colors.purple[100]
+                        : Colors.blue[100],
+                  ),
+                  const SizedBox(width: 8),
+                  Chip(
+                    avatar: Icon(
+                      currentProject.isGroupProject ? Icons.groups : Icons.person,
+                      size: 18,
+                      color: currentProject.isGroupProject ? Colors.green[900] : Colors.orange[900],
+                    ),
+                    label: Text(
+                      currentProject.isGroupProject ? 'Group Project' : 'Individual Project',
+                      style: TextStyle(
+                        color: currentProject.isGroupProject ? Colors.green[900] : Colors.orange[900],
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    backgroundColor: currentProject.isGroupProject ? Colors.green[100] : Colors.orange[100],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              
+              // Individual Student Details
+              if (!currentProject.isGroupProject && currentProject.studentId != null) ...[ 
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.person, size: 20, color: Colors.blue),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Student Information',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(),
+                        _buildInfoRow('Student ID', currentProject.studentId ?? 'N/A'),
+                        if (currentProject.batch != null)
+                          _buildInfoRow('Batch', currentProject.batch.toString()),
+                        if (currentProject.level != null)
+                          _buildInfoRow('Level', currentProject.level.toString()),
+                        if (currentProject.term != null)
+                          _buildInfoRow('Term', currentProject.term.toString()),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              // Group Project Details
+              if (currentProject.isGroupProject) ...[
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            const Icon(Icons.groups, size: 20, color: Colors.green),
+                            const SizedBox(width: 8),
+                            Text(
+                              'Group Information',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const Divider(),
+                        if (currentProject.groupName != null)
+                          _buildInfoRow('Group Name', currentProject.groupName!),
+                        _buildInfoRow('Team Size', '${currentProject.teamMembers.length} members'),
+                        const SizedBox(height: 12),
+                        if (currentProject.teamMembers.isNotEmpty) ...[ 
+                          Text(
+                            'Team Members:',
+                            style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          ...currentProject.teamMembers.asMap().entries.map((entry) {
+                            final index = entry.key;
+                            final member = entry.value;
+                            return Card(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              elevation: 0,
+                              color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: Theme.of(context).colorScheme.primary,
+                                  foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                                  child: Text('${index + 1}'),
+                                ),
+                                title: Text(
+                                  member.name,
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.onSurface,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                subtitle: Text(
+                                  'ID: ${member.id} • Batch: ${member.batch} • Level: ${member.level} • Term: ${member.term}',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                                dense: true,
+                              ),
+                            );
+                          }).toList(),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              
+              // Drive Link Button
+              if (currentProject.driveLink != null && currentProject.driveLink!.isNotEmpty) ...[
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () => _openDriveLink(currentProject.driveLink!),
+                    icon: const Icon(Icons.cloud),
+                    label: const Text('View Additional Resources (Drive)'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: Colors.green[700],
+                      padding: const EdgeInsets.all(16),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+              const SizedBox(height: 16),
+              
               // Action Buttons
-              if (project.pdfUrl != null && project.pdfUrl!.isNotEmpty) ...[
+              if (currentProject.pdfUrl != null && currentProject.pdfUrl!.isNotEmpty) ...[
                 FilledButton.icon(
                   onPressed: () {
-                    debugPrint('PDF button clicked. URL: ${project.pdfUrl}');
-                    _openPdf(project.pdfUrl!);
+                    debugPrint('PDF button clicked. URL: ${currentProject.pdfUrl}');
+                    _openPdf(currentProject.pdfUrl!);
                   },
                   icon: const Icon(Icons.picture_as_pdf),
                   label: const Text('Open PDF'),
                 ),
                 const SizedBox(height: 8),
-              ] else if (project.pdfUrl != null) ...[
+              ] else if (currentProject.pdfUrl != null) ...[
                 // Debug: Show if pdfUrl is empty string
                 Container(
                   padding: const EdgeInsets.all(8),
                   color: Colors.orange[100],
-                  child: Text('PDF URL is empty: ${project.pdfUrl}'),
+                  child: Text('PDF URL is empty: ${currentProject.pdfUrl}'),
                 ),
               ],
-              if (project.githubUrl != null && project.githubUrl!.isNotEmpty)
+              if (currentProject.githubUrl != null && currentProject.githubUrl!.isNotEmpty)
                 OutlinedButton.icon(
-                  onPressed: () => _openGitHub(project.githubUrl!),
+                  onPressed: () => _openGitHub(currentProject.githubUrl!),
                   icon: const Icon(Icons.code),
                   label: const Text('View on GitHub'),
                 ),
@@ -246,17 +482,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 ...projectReviews.map((review) => Card(
                   child: ListTile(
                     leading: CircleAvatar(
-                      child: Text(review.reviewerName[0].toUpperCase()),
+                      child: Text((review.reviewerName.isNotEmpty ? review.reviewerName[0] : 'R').toUpperCase()),
                     ),
-                    title: Row(
+                    title: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text(review.reviewerName),
-                        const SizedBox(width: 8),
-                        ...List.generate(5, (index) => Icon(
-                          index < review.rating ? Icons.star : Icons.star_border,
-                          size: 16,
-                          color: Colors.amber,
-                        )),
+                        Text(review.reviewerName.isNotEmpty ? review.reviewerName : 'Anonymous Reviewer'),
+                        const SizedBox(height: 4),
+                        Row(
+                          children: List.generate(5, (index) => Icon(
+                            index < review.rating.round() ? Icons.star : Icons.star_border,
+                            size: 18,
+                            color: Colors.amber,
+                          )),
+                        ),
                       ],
                     ),
                     subtitle: Text(review.comment),
@@ -298,66 +537,98 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           );
         },
       ),
-      bottomNavigationBar: widget.authService?.canCommentOnProjects() == true || widget.authService?.canRateProjects() == true
-          ? SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.all(12),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: <Widget>[
-                    // Rating Input (only for teachers)
-                    if (widget.authService?.canRateProjects() == true) ...[
-                      Row(
-                        children: <Widget>[
-                          const Text('Rating: '),
-                          ...List.generate(5, (index) => IconButton(
-                            icon: Icon(
-                              index < _rating ? Icons.star : Icons.star_border,
-                              color: Colors.amber,
-                            ),
-                            onPressed: () => setState(() => _rating = index + 1.0),
-                          )),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
+    ),
+    if (widget.authService?.canCommentOnProjects() == true || widget.authService?.canRateProjects() == true)
+      Container(
+        decoration: BoxDecoration(
+          color: Theme.of(context).scaffoldBackgroundColor,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              offset: const Offset(0, -2),
+              blurRadius: 4,
+            ),
+          ],
+        ),
+        child: SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: <Widget>[
+                // Rating Input (only for teachers)
+                if (widget.authService?.canRateProjects() == true) ...[
+                  Row(
+                    children: <Widget>[
+                      const Text('Rating: '),
+                      ...List.generate(5, (index) => IconButton(
+                        icon: Icon(
+                          index < _rating ? Icons.star : Icons.star_border,
+                          color: Colors.amber,
+                        ),
+                        onPressed: () => setState(() => _rating = index + 1.0),
+                      )),
                     ],
-                    // Comment Input (only for teachers)
-                    if (widget.authService?.canCommentOnProjects() == true) ...[
-                      Row(
-                        children: <Widget>[
-                          Expanded(
-                            child: TextField(
-                              controller: _commentController,
-                              decoration: const InputDecoration(
-                                hintText: 'Add a comment',
-                                border: OutlineInputBorder(),
-                              ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                // Comment Input (only for teachers)
+                if (widget.authService?.canCommentOnProjects() == true) ...[
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: <Widget>[
+                      Expanded(
+                        child: TextField(
+                          controller: _commentController,
+                          maxLines: 3,
+                          minLines: 1,
+                          decoration: const InputDecoration(
+                            hintText: 'Write your review comment...',
+                            border: OutlineInputBorder(),
+                            contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12,
+                              vertical: 12,
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          FilledButton(
-                            onPressed: _isSubmitting ? null : _submitReview,
-                            child: _isSubmitting
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(strokeWidth: 2),
-                                  )
-                                : const Text('Post'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      FilledButton(
+                        onPressed: _isSubmitting ? null : _submitReview,
+                        style: FilledButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 24,
+                            vertical: 16,
                           ),
-                        ],
+                        ),
+                        child: _isSubmitting
+                            ? const SizedBox(
+                                height: 20,
+                                width: 20,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: Colors.white,
+                                ),
+                              )
+                            : const Text('Post'),
                       ),
                     ],
-                  ],
-                ),
-              ),
-            )
-          : null,
-    );
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
+      ),
+    ],
+  ),
+);
   }
 
   Color _getStatusColor(ProjectStatus status, BuildContext context) {
     switch (status) {
+      case ProjectStatus.hidden:
+        return Colors.grey.shade400;
       case ProjectStatus.draft:
         return Colors.grey;
       case ProjectStatus.pending:
@@ -946,6 +1217,84 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
             content: Text('Error opening GitHub: $e\n\nURL: $githubUrl'),
             backgroundColor: Colors.red,
             duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    }
+  }
+  
+  // Helper method to build info rows
+  Widget _buildInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 100,
+            child: Text(
+              '$label:',
+              style: const TextStyle(
+                fontWeight: FontWeight.w600,
+                color: Colors.grey,
+              ),
+            ),
+          ),
+          Expanded(
+            child: Text(value),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Helper method to open drive link
+  Future<void> _openDriveLink(String driveLink) async {
+    try {
+      debugPrint('Opening Drive Link: $driveLink');
+      
+      String urlToOpen = driveLink.trim();
+      if (!urlToOpen.contains('://')) {
+        urlToOpen = 'https://$urlToOpen';
+      }
+      
+      final uri = Uri.tryParse(urlToOpen);
+      if (uri == null) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Invalid Drive URL format: $driveLink'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+      
+      final canLaunch = await canLaunchUrl(uri);
+      if (!canLaunch) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Unable to open Drive link. Please check if the URL is accessible.'),
+              backgroundColor: Colors.orange,
+            ),
+          );
+        }
+        return;
+      }
+      
+      await launchUrl(
+        uri,
+        mode: LaunchMode.externalApplication,
+      );
+    } catch (e) {
+      debugPrint('Error opening Drive link: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error opening Drive link: $e'),
+            backgroundColor: Colors.red,
           ),
         );
       }

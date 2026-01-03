@@ -10,6 +10,7 @@ import 'mvc/controllers/auth_service.dart';
 import 'mvc/controllers/project_service.dart';
 import 'mvc/models/user.dart';
 import 'mvc/models/project.dart';
+import 'mvc/models/team_member.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -475,7 +476,42 @@ class _UploadScreenState extends State<UploadScreen> {
   String? _selectedPdfPath;
   
   ProjectCategory _selectedCategory = ProjectCategory.other;
+  ProjectType _selectedProjectType = ProjectType.project;
   bool _isSubmitting = false;
+  
+  // Group/Individual project fields
+  bool _isGroupProject = false;
+  final _groupNameController = TextEditingController();
+  int _numberOfMembers = 2;
+  final List<Map<String, TextEditingController>> _teamMemberControllers = [];
+  
+  // Individual student fields
+  final _studentIdController = TextEditingController();
+  final _batchController = TextEditingController();
+  final _levelController = TextEditingController();
+  final _termController = TextEditingController();
+  
+  // Drive link
+  final _driveLinkController = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _initializeTeamMembers();
+  }
+  
+  void _initializeTeamMembers() {
+    _teamMemberControllers.clear();
+    for (int i = 0; i < _numberOfMembers; i++) {
+      _teamMemberControllers.add({
+        'name': TextEditingController(),
+        'id': TextEditingController(),
+        'batch': TextEditingController(),
+        'level': TextEditingController(),
+        'term': TextEditingController(),
+      });
+    }
+  }
 
   @override
   void dispose() {
@@ -483,12 +519,35 @@ class _UploadScreenState extends State<UploadScreen> {
     _abstractController.dispose();
     _yearController.dispose();
     _githubController.dispose();
+    _groupNameController.dispose();
+    _studentIdController.dispose();
+    _batchController.dispose();
+    _levelController.dispose();
+    _termController.dispose();
+    _driveLinkController.dispose();
+    for (var controllers in _teamMemberControllers) {
+      controllers.values.forEach((c) => c.dispose());
+    }
     super.dispose();
   }
 
   Future<void> _submitProject() async {
     if (_formKey.currentState!.validate() && widget.authService.currentUser != null) {
       setState(() => _isSubmitting = true);
+
+      // Build team members list if group project
+      final List<TeamMember> teamMembers = [];
+      if (_isGroupProject) {
+        for (var controllers in _teamMemberControllers) {
+          teamMembers.add(TeamMember(
+            name: controllers['name']!.text.trim(),
+            id: controllers['id']!.text.trim(),
+            batch: int.tryParse(controllers['batch']!.text) ?? 0,
+            level: int.tryParse(controllers['level']!.text) ?? 0,
+            term: int.tryParse(controllers['term']!.text) ?? 0,
+          ));
+        }
+      }
 
       final project = Project(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
@@ -498,12 +557,22 @@ class _UploadScreenState extends State<UploadScreen> {
         authorName: widget.authService.currentUser!.name,
         category: _selectedCategory,
         year: int.tryParse(_yearController.text) ?? DateTime.now().year,
+        semester: Semester.summer, // Defaulting to summer for now
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
         status: ProjectStatus.pending,
         githubUrl: _githubController.text.trim().isNotEmpty ? _githubController.text.trim() : null,
         imageUrls: _selectedImagePaths,
         pdfUrl: _selectedPdfPath,
+        projectType: _selectedProjectType,
+        isGroupProject: _isGroupProject,
+        groupName: _isGroupProject ? _groupNameController.text.trim() : null,
+        teamMembers: teamMembers,
+        driveLink: _driveLinkController.text.trim().isNotEmpty ? _driveLinkController.text.trim() : null,
+        studentId: !_isGroupProject ? _studentIdController.text.trim() : null,
+        batch: !_isGroupProject ? int.tryParse(_batchController.text) : null,
+        level: !_isGroupProject ? int.tryParse(_levelController.text) : null,
+        term: !_isGroupProject ? int.tryParse(_termController.text) : null,
       );
 
       final success = await widget.projectService.createProject(project);
@@ -528,10 +597,22 @@ class _UploadScreenState extends State<UploadScreen> {
     _abstractController.clear();
     _yearController.clear();
     _githubController.clear();
+    _groupNameController.clear();
+    _studentIdController.clear();
+    _batchController.clear();
+    _levelController.clear();
+    _termController.clear();
+    _driveLinkController.clear();
+    for (var controllers in _teamMemberControllers) {
+      controllers.values.forEach((c) => c.clear());
+    }
     setState(() {
       _selectedCategory = ProjectCategory.other;
       _selectedImagePaths.clear();
       _selectedPdfPath = null;
+      _isGroupProject = false;
+      _numberOfMembers = 2;
+      _initializeTeamMembers();
     });
   }
 
@@ -726,6 +807,310 @@ class _UploadScreenState extends State<UploadScreen> {
                 TextFormField(
                   controller: _githubController,
                   decoration: const InputDecoration(labelText: 'GitHub URL (optional)'),
+                ),
+          const SizedBox(height: 16),
+          
+                // Project Type Selection
+                DropdownButtonFormField<ProjectType>(
+                  decoration: const InputDecoration(labelText: 'Project Type'),
+                  value: _selectedProjectType,
+                  items: ProjectType.values.map((type) => DropdownMenuItem(
+                    value: type,
+                    child: Text(type.displayName),
+                  )).toList(),
+                  onChanged: (ProjectType? value) {
+                    if (value != null) {
+                      setState(() => _selectedProjectType = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 24),
+                
+                // Team Configuration Section
+                const _SectionTitle('Team Configuration'),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: RadioListTile<bool>(
+                        title: const Text('Individual'),
+                        value: false,
+                        groupValue: _isGroupProject,
+                        onChanged: (bool? value) {
+                          if (value != null) {
+                            setState(() => _isGroupProject = value);
+                          }
+                        },
+                      ),
+                    ),
+                    Expanded(
+                      child: RadioListTile<bool>(
+                        title: const Text('Group'),
+                        value: true,
+                        groupValue: _isGroupProject,
+                        onChanged: (bool? value) {
+                          if (value != null) {
+                            setState(() => _isGroupProject = value);
+                          }
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                
+                // Individual Project Fields
+                if (!_isGroupProject) ...[
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Student Details',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _studentIdController,
+                            decoration: const InputDecoration(labelText: 'Student ID'),
+                            validator: (value) {
+                              if (!_isGroupProject && (value == null || value.trim().isEmpty)) {
+                                return 'Please enter student ID';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _batchController,
+                                  decoration: const InputDecoration(labelText: 'Batch'),
+                                  keyboardType: TextInputType.number,
+                                  validator: (value) {
+                                    if (!_isGroupProject && (value == null || value.trim().isEmpty)) {
+                                      return 'Required';
+                                    }
+                                    if (!_isGroupProject && int.tryParse(value!) == null) {
+                                      return 'Must be a number';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _levelController,
+                                  decoration: const InputDecoration(labelText: 'Level'),
+                                  keyboardType: TextInputType.number,
+                                  validator: (value) {
+                                    if (!_isGroupProject && (value == null || value.trim().isEmpty)) {
+                                      return 'Required';
+                                    }
+                                    if (!_isGroupProject && int.tryParse(value!) == null) {
+                                      return 'Must be a number';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: TextFormField(
+                                  controller: _termController,
+                                  decoration: const InputDecoration(labelText: 'Term'),
+                                  keyboardType: TextInputType.number,
+                                  validator: (value) {
+                                    if (!_isGroupProject && (value == null || value.trim().isEmpty)) {
+                                      return 'Required';
+                                    }
+                                    if (!_isGroupProject && int.tryParse(value!) == null) {
+                                      return 'Must be a number';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                ],
+                
+                // Group Project Fields
+                if (_isGroupProject) ...[
+                  Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Group Details',
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          TextFormField(
+                            controller: _groupNameController,
+                            decoration: const InputDecoration(labelText: 'Group Name'),
+                            validator: (value) {
+                              if (_isGroupProject && (value == null || value.trim().isEmpty)) {
+                                return 'Please enter group name';
+                              }
+                              return null;
+                            },
+                          ),
+                          const SizedBox(height: 12),
+                          DropdownButtonFormField<int>(
+                            decoration: const InputDecoration(labelText: 'Number of Team Members'),
+                            value: _numberOfMembers,
+                            items: List.generate(9, (index) => index + 2).map((count) => DropdownMenuItem(
+                              value: count,
+                              child: Text('$count members'),
+                            )).toList(),
+                            onChanged: (int? value) {
+                              if (value != null) {
+                                setState(() {
+                                  _numberOfMembers = value;
+                                  _initializeTeamMembers();
+                                });
+                              }
+                            },
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  // Team Members
+                  ...List.generate(_numberOfMembers, (index) {
+                    final controllers = _teamMemberControllers[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      child: ExpansionTile(
+                        title: Text('Team Member ${index + 1}'),
+                        initiallyExpanded: index == 0,
+                        children: [
+                          Padding(
+                            padding: const EdgeInsets.all(16),
+                            child: Column(
+                              children: [
+                                TextFormField(
+                                  controller: controllers['name'],
+                                  decoration: const InputDecoration(labelText: 'Name'),
+                                  validator: (value) {
+                                    if (_isGroupProject && (value == null || value.trim().isEmpty)) {
+                                      return 'Please enter name';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                TextFormField(
+                                  controller: controllers['id'],
+                                  decoration: const InputDecoration(labelText: 'Student ID'),
+                                  validator: (value) {
+                                    if (_isGroupProject && (value == null || value.trim().isEmpty)) {
+                                      return 'Please enter student ID';
+                                    }
+                                    return null;
+                                  },
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: controllers['batch'],
+                                        decoration: const InputDecoration(labelText: 'Batch'),
+                                        keyboardType: TextInputType.number,
+                                        validator: (value) {
+                                          if (_isGroupProject && (value == null || value.trim().isEmpty)) {
+                                            return 'Required';
+                                          }
+                                          if (_isGroupProject && int.tryParse(value!) == null) {
+                                            return 'Number only';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: controllers['level'],
+                                        decoration: const InputDecoration(labelText: 'Level'),
+                                        keyboardType: TextInputType.number,
+                                        validator: (value) {
+                                          if (_isGroupProject && (value == null || value.trim().isEmpty)) {
+                                            return 'Required';
+                                          }
+                                          if (_isGroupProject && int.tryParse(value!) == null) {
+                                            return 'Number only';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: TextFormField(
+                                        controller: controllers['term'],
+                                        decoration: const InputDecoration(labelText: 'Term'),
+                                        keyboardType: TextInputType.number,
+                                        validator: (value) {
+                                          if (_isGroupProject && (value == null || value.trim().isEmpty)) {
+                                            return 'Required';
+                                          }
+                                          if (_isGroupProject && int.tryParse(value!) == null) {
+                                            return 'Number only';
+                                          }
+                                          return null;
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                  const SizedBox(height: 16),
+                ],
+                
+                // Additional Resources (Drive Link)
+                const _SectionTitle('Additional Resources'),
+                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _driveLinkController,
+                  decoration: const InputDecoration(
+                    labelText: 'Google Drive Link (optional)',
+                    hintText: 'Link to screenshots, additional PDFs, or posters',
+                  ),
+                  validator: (value) {
+                    if (value != null && value.trim().isNotEmpty) {
+                      // Basic URL validation
+                      if (!value.trim().startsWith('http://') && !value.trim().startsWith('https://')) {
+                        return 'Please enter a valid URL';
+                      }
+                    }
+                    return null;
+                  },
                 ),
           const SizedBox(height: 16),
                 // File upload section
@@ -1313,6 +1698,8 @@ class _ProjectCard extends StatelessWidget {
 
   Color _getStatusColor(ProjectStatus status) {
     switch (status) {
+      case ProjectStatus.hidden:
+        return Colors.grey.shade400;
       case ProjectStatus.draft:
         return Colors.grey;
       case ProjectStatus.pending:

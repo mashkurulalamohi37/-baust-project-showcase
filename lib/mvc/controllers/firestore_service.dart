@@ -5,6 +5,7 @@ import 'package:firebase_core/firebase_core.dart';
 import '../models/user.dart';
 import '../models/project.dart';
 import '../models/review.dart';
+import '../models/team_member.dart';
 import '../models/feedback.dart' as feedback_models;
 import 'notification_service.dart';
 
@@ -523,6 +524,7 @@ class FirestoreService {
         'authorName': project.authorName,
         'category': project.category.name,
         'year': project.year,
+        'semester': project.semester.name,
         'supervisor': project.supervisor,
         'githubUrl': project.githubUrl,
         'imageUrls': project.imageUrls,
@@ -537,6 +539,15 @@ class FirestoreService {
         'updatedAt': project.updatedAt.toIso8601String(),
         'feedback': project.feedback.map((f) => f.toMap()).toList(),
         'projectType': project.projectType.name,
+        'isGroupProject': project.isGroupProject,
+        'groupName': project.groupName,
+        'teamMembers': project.teamMembers.map((m) => m.toMap()).toList(),
+        'driveLink': project.driveLink,
+        'studentId': project.studentId,
+        'batch': project.batch,
+        'level': project.level,
+        'term': project.term,
+        'award': project.award.name,
       });
       print('Project saved successfully: ${project.title} (facultyId: ${project.facultyId}, facultyName: ${project.facultyName})');
     } catch (e) {
@@ -560,6 +571,12 @@ class FirestoreService {
             (e) => e.name == data['category'],
           ),
           year: data['year'],
+          semester: data['semester'] != null
+              ? Semester.values.firstWhere(
+                  (e) => e.name == data['semester'],
+                  orElse: () => Semester.summer,
+                )
+              : Semester.summer,
           supervisor: data['supervisor'],
           githubUrl: data['githubUrl'],
           imageUrls: List<String>.from(data['imageUrls'] ?? []),
@@ -589,6 +606,23 @@ class FirestoreService {
                   orElse: () => ProjectType.project,
                 )
               : ProjectType.project,
+          isGroupProject: data['isGroupProject'] ?? false,
+          groupName: data['groupName'],
+          teamMembers: (data['teamMembers'] as List<dynamic>?)
+                  ?.map((m) => TeamMember.fromMap(m))
+                  .toList() ??
+              [],
+          driveLink: data['driveLink'],
+          studentId: data['studentId'],
+          batch: data['batch'],
+          level: data['level'],
+          term: data['term'],
+          award: data['award'] != null
+              ? ProjectAward.values.firstWhere(
+                  (e) => e.name == data['award'],
+                  orElse: () => ProjectAward.none,
+                )
+              : ProjectAward.none,
         );
       }).toList();
     } catch (e) {
@@ -619,6 +653,7 @@ class FirestoreService {
       if (year != null) {
         query = query.where('year', isEqualTo: year);
       }
+      // Note: We can add semester filter here later if needed, but for now filtering happens in UI or specific queries
       if (authorId != null) {
         query = query.where('authorId', isEqualTo: authorId);
       }
@@ -647,7 +682,14 @@ class FirestoreService {
             (e) => e.name == data['category'],
             orElse: () => ProjectCategory.other,
           ),
+
           year: data['year'] ?? DateTime.now().year,
+          semester: data['semester'] != null
+              ? Semester.values.firstWhere(
+                  (e) => e.name == data['semester'],
+                  orElse: () => Semester.summer,
+                )
+              : Semester.summer,
           supervisor: data['supervisor'],
           status: ProjectStatus.values.firstWhere(
             (e) => e.name == data['status'],
@@ -678,6 +720,23 @@ class FirestoreService {
                   .toList() ??
               [],
           versions: const [],
+          isGroupProject: data['isGroupProject'] ?? false,
+          groupName: data['groupName'],
+          teamMembers: (data['teamMembers'] as List<dynamic>?)
+                  ?.map((m) => TeamMember.fromMap(m))
+                  .toList() ??
+              [],
+          driveLink: data['driveLink'],
+          studentId: data['studentId'],
+          batch: data['batch'],
+          level: data['level'],
+          term: data['term'],
+          award: data['award'] != null
+              ? ProjectAward.values.firstWhere(
+                  (e) => e.name == data['award'],
+                  orElse: () => ProjectAward.none,
+                )
+              : ProjectAward.none,
         );
       }).toList();
     } catch (e) {
@@ -706,6 +765,12 @@ class FirestoreService {
           orElse: () => ProjectCategory.other,
         ),
         year: data['year'] ?? DateTime.now().year,
+        semester: data['semester'] != null
+            ? Semester.values.firstWhere(
+                (e) => e.name == data['semester'],
+                orElse: () => Semester.summer,
+              )
+            : Semester.summer,
         supervisor: data['supervisor'],
         status: ProjectStatus.values.firstWhere(
           (e) => e.name == data['status'],
@@ -736,6 +801,23 @@ class FirestoreService {
                 .toList() ??
             [],
         versions: const [],
+        isGroupProject: data['isGroupProject'] ?? false,
+        groupName: data['groupName'],
+        teamMembers: (data['teamMembers'] as List<dynamic>?)
+                ?.map((m) => TeamMember.fromMap(m))
+                .toList() ??
+            [],
+        driveLink: data['driveLink'],
+        studentId: data['studentId'],
+        batch: data['batch'],
+        level: data['level'],
+        term: data['term'],
+        award: data['award'] != null
+            ? ProjectAward.values.firstWhere(
+                (e) => e.name == data['award'],
+                orElse: () => ProjectAward.none,
+              )
+            : ProjectAward.none,
       );
     } catch (e) {
       print('ERROR: Failed to get project by id: $e');
@@ -775,6 +857,15 @@ class FirestoreService {
         'updatedAt': project.updatedAt.toIso8601String(),
         'feedback': project.feedback.map((f) => f.toMap()).toList(),
         'projectType': project.projectType.name,
+        'isGroupProject': project.isGroupProject,
+        'groupName': project.groupName,
+        'teamMembers': project.teamMembers.map((m) => m.toMap()).toList(),
+        'driveLink': project.driveLink,
+        'studentId': project.studentId,
+        'batch': project.batch,
+        'level': project.level,
+        'term': project.term,
+        'award': project.award.name,
       });
       print('Project updated successfully: ${project.title} (version: ${project.version}, isFeatured: ${project.isFeatured}, facultyId: ${project.facultyId})');
     } catch (e) {
@@ -839,6 +930,32 @@ class FirestoreService {
     } catch (e) {
       print('ERROR: Failed to delete review: $e');
       rethrow;
+    }
+  }
+
+  static Future<List<Review>> getReviewsByReviewerId(String reviewerId) async {
+    try {
+      final query = await _firestore
+          .collection(_reviewsCollection)
+          .where('reviewerId', isEqualTo: reviewerId)
+          .orderBy('createdAt', descending: true)
+          .get();
+
+      return query.docs.map((doc) {
+        final data = doc.data();
+        return Review(
+          id: data['id'],
+          projectId: data['projectId'],
+          reviewerId: data['reviewerId'],
+          reviewerName: data['reviewerName'],
+          rating: (data['rating'] ?? 0.0).toDouble(),
+          comment: data['comment'],
+          createdAt: DateTime.parse(data['createdAt']),
+        );
+      }).toList();
+    } catch (e) {
+      print('ERROR: Failed to get reviews by reviewer: $e');
+      return [];
     }
   }
 
@@ -996,6 +1113,12 @@ class FirestoreService {
             orElse: () => ProjectCategory.other,
           ),
           year: data['year'] ?? DateTime.now().year,
+          semester: data['semester'] != null
+              ? Semester.values.firstWhere(
+                  (e) => e.name == data['semester'],
+                  orElse: () => Semester.summer,
+                )
+              : Semester.summer,
           supervisor: data['supervisor'] ?? '',
           createdAt: DateTime.parse(data['createdAt']),
           updatedAt: DateTime.parse(data['updatedAt']),
@@ -1231,5 +1354,114 @@ class FirestoreService {
 
   static Future<void> deleteNotification(String notificationId) async {
     await _firestore.collection('notifications').doc(notificationId).delete();
+  }
+
+  // Activity Logging Operations
+  
+  static Future<void> _logActivity({
+    required String type,
+    required String description,
+    required String actorId,
+    required String actorName,
+    Map<String, dynamic>? metadata,
+  }) async {
+    try {
+      await _firestore.collection('activities').add({
+        'type': type,
+        'description': description,
+        'actorId': actorId,
+        'actorName': actorName,
+        'timestamp': FieldValue.serverTimestamp(),
+        'metadata': metadata,
+      });
+    } catch (e) {
+      print('ERROR: Failed to log activity: $e');
+    }
+  }
+
+  static Future<void> logTeacherRegistered(User user) async {
+    // If not implemented, just a no-op or simple print for now to fix build
+    // But since I'm implementing _logActivity, I'll use it.
+     await _logActivity(
+      type: 'teacher_registration',
+      description: 'New teacher registration: ${user.name}',
+      actorId: user.id,
+      actorName: user.name,
+      metadata: {
+        'email': user.email,
+        'department': user.department,
+      },
+    );
+  }
+
+  static Future<void> logTeacherApproved(User teacher, String adminId) async {
+    await _logActivity(
+      type: 'teacher_approval',
+      description: 'Teacher approved: ${teacher.name}',
+      actorId: adminId,
+      actorName: 'Admin', 
+      metadata: {
+        'teacherId': teacher.id,
+        'teacherEmail': teacher.email,
+      },
+    );
+  }
+
+  static Future<void> logTeacherRejected(User teacher, String adminId) async {
+    await _logActivity(
+      type: 'teacher_rejection',
+      description: 'Teacher rejected: ${teacher.name}',
+      actorId: adminId,
+      actorName: 'Admin',
+      metadata: {
+        'teacherId': teacher.id,
+        'teacherEmail': teacher.email,
+      },
+    );
+  }
+
+  static Future<void> logProjectUploaded(Project project) async {
+    await _logActivity(
+      type: 'project_upload',
+      description: 'New project uploaded: ${project.title}',
+      actorId: project.authorId,
+      actorName: project.authorName,
+      metadata: {
+        'projectId': project.id,
+        'category': project.category.name,
+      },
+    );
+  }
+
+  static Future<void> logProjectStatusChange(
+    Project project, 
+    ProjectStatus oldStatus, 
+    ProjectStatus newStatus, 
+    String? actorId, 
+    String? actorName
+  ) async {
+    await _logActivity(
+      type: 'project_status_change',
+      description: 'Project ${project.title} status changed from ${oldStatus.name} to ${newStatus.name}',
+      actorId: actorId ?? 'system',
+      actorName: actorName ?? 'System',
+      metadata: {
+        'projectId': project.id,
+        'oldStatus': oldStatus.name,
+        'newStatus': newStatus.name,
+      },
+    );
+  }
+
+  static Future<void> logProjectReviewed(Project project, String reviewerName) async {
+    await _logActivity(
+      type: 'project_reviewed',
+      description: 'Project ${project.title} reviewed by $reviewerName',
+      actorId: 'unknown', 
+      actorName: reviewerName,
+      metadata: {
+        'projectId': project.id,
+      },
+    );
   }
 }

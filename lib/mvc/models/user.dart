@@ -39,6 +39,56 @@ class User {
     this.isActive = true,
   });
 
+  factory User.fromJson(Map<String, dynamic> json) {
+    return User(
+      id: json['id'] as String,
+      name: json['name'] as String,
+      email: json['email'] as String,
+      password: json['password'] as String,
+      role: _roleFrom(json['role']),
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      profileImageUrl: json['profileImageUrl'] as String?,
+      isApproved: json['isApproved'] as bool? ?? true,
+      approvedAt: json['approvedAt'] != null
+          ? DateTime.parse(json['approvedAt'] as String)
+          : null,
+      approvedBy: json['approvedBy'] as String?,
+      department: json['department'] as String?,
+      employeeId: json['employeeId'] as String?,
+      studentId: json['studentId'] as String?,
+      year: json['year'] as int?,
+      phoneNumber: json['phoneNumber'] as String?,
+      lastLoginAt: json['lastLoginAt'] != null
+          ? DateTime.parse(json['lastLoginAt'] as String)
+          : null,
+      isActive: json['isActive'] as bool? ?? true,
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'name': name,
+      'email': email,
+      'password': password,
+      'role': role.name,
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
+      'profileImageUrl': profileImageUrl,
+      'isApproved': isApproved,
+      'approvedAt': approvedAt?.toIso8601String(),
+      'approvedBy': approvedBy,
+      'department': department,
+      'employeeId': employeeId,
+      'studentId': studentId,
+      'year': year,
+      'phoneNumber': phoneNumber,
+      'lastLoginAt': lastLoginAt?.toIso8601String(),
+      'isActive': isActive,
+    };
+  }
+
   User copyWith({
     String? id,
     String? name,
@@ -79,6 +129,16 @@ class User {
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       isActive: isActive ?? this.isActive,
     );
+  }
+
+  static UserRole _roleFrom(dynamic value) {
+    if (value is String) {
+      return UserRole.values.byName(value);
+    }
+    if (value is int) {
+      return UserRole.values[value];
+    }
+    throw ArgumentError('Invalid role value: $value');
   }
 }
 

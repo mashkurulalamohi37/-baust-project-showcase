@@ -18,6 +18,7 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
   
   ProjectCategory? _selectedCategory;
   int? _selectedYear;
+  Semester? _selectedSemester;
   List<Project> _filteredProjects = [];
   bool _hasSearched = false;
 
@@ -52,12 +53,15 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
         // Year filter
         final matchesYear = _selectedYear == null || project.year == _selectedYear;
 
+        // Semester filter
+        final matchesSemester = _selectedSemester == null || project.semester == _selectedSemester;
+
         // Supervisor filter
         final supervisorQuery = _supervisorController.text.toLowerCase();
         final matchesSupervisor = supervisorQuery.isEmpty ||
             (project.facultyName?.toLowerCase().contains(supervisorQuery) ?? false);
 
-        return matchesSearch && matchesCategory && matchesYear && matchesSupervisor;
+        return matchesSearch && matchesCategory && matchesYear && matchesSemester && matchesSupervisor;
       }).toList();
     });
   }
@@ -68,6 +72,7 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
       _supervisorController.clear();
       _selectedCategory = null;
       _selectedYear = null;
+      _selectedSemester = null;
       _hasSearched = false;
       _filteredProjects = _projectService.projects;
     });
@@ -164,13 +169,48 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
               ),
               const SizedBox(height: 12),
               
-              // Supervisor Filter
-              TextField(
-                controller: _supervisorController,
-                decoration: const InputDecoration(
-                  labelText: 'Supervisor',
-                  border: OutlineInputBorder(),
-                ),
+
+              const SizedBox(height: 12),
+              
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: DropdownButtonFormField<Semester>(
+                      decoration: const InputDecoration(
+                        labelText: 'Semester',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                      isExpanded: true,
+                      value: _selectedSemester,
+                      items: [
+                        const DropdownMenuItem<Semester>(
+                          value: null,
+                          child: Text('All Semesters', overflow: TextOverflow.ellipsis),
+                        ),
+                        ...Semester.values.map((s) => DropdownMenuItem(
+                          value: s,
+                          child: Text(s.displayName, overflow: TextOverflow.ellipsis),
+                        )),
+                      ],
+                      onChanged: (Semester? value) {
+                        setState(() => _selectedSemester = value);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _supervisorController,
+                      decoration: const InputDecoration(
+                        labelText: 'Supervisor',
+                        border: OutlineInputBorder(),
+                        contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               
@@ -285,7 +325,7 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
                               label: Text(project.category.displayName),
                               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             ),
-                            Text('${project.year}'),
+                            Text('${project.semester.displayName} ${project.year}'),
                             if (project.facultyName != null)
                               Text('• ${project.facultyName}', overflow: TextOverflow.ellipsis),
                           ],

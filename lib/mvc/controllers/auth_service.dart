@@ -1,7 +1,9 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../models/user.dart';
 import 'firestore_service.dart';
-import '../../services/firestore_service.dart' as firestore_service;
 
 class AuthService extends ChangeNotifier {
   // Singleton instance so auth state is shared app-wide
@@ -14,6 +16,7 @@ class AuthService extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   UserRole? _pendingRole; // Store the role selected during login
+  static const String _userPrefsKey = 'auth.currentUser';
 
   // Hardcoded admin credentials
   static const String _adminEmail = 'ohi82@gmail.com';
@@ -31,6 +34,7 @@ class AuthService extends ChangeNotifier {
 
   void _init() {
     debugPrint('AuthService: Initializing with Firestore...');
+    _restoreSession();
     debugPrint('AuthService: Initialization complete');
   }
 
@@ -76,6 +80,7 @@ class AuthService extends ChangeNotifier {
           approvedBy: 'system',
           lastLoginAt: DateTime.now(),
         );
+        await _persistCurrentUser();
         _setLoading(false);
         notifyListeners();
         return true;
@@ -180,6 +185,7 @@ class AuthService extends ChangeNotifier {
             debugPrint('Failed to update user in Firestore: $e');
           }
 
+          await _persistCurrentUser();
           debugPrint('AuthService: Existing user login successful');
         } else {
           // User doesn't exist, show helpful error message
@@ -315,7 +321,7 @@ class AuthService extends ChangeNotifier {
         );
         
         // Log activity for teacher registration
-        await firestore_service.FirestoreService.logTeacherRegistered(user);
+        await FirestoreService.logTeacherRegistered(user);
         
         _setError(
           'Account created successfully! Your teacher account is pending admin approval. Please contact an administrator.',
@@ -329,6 +335,7 @@ class AuthService extends ChangeNotifier {
         debugPrint(
           'AuthService: Signup successful for ${user.name} with role: ${user.role}',
         );
+        await _persistCurrentUser();
         _setLoading(false);
         notifyListeners();
         return true;
@@ -344,6 +351,7 @@ class AuthService extends ChangeNotifier {
   Future<void> logout() async {
     _currentUser = null;
     _errorMessage = null;
+    await _clearPersistedUser();
     notifyListeners();
   }
 
@@ -452,7 +460,7 @@ class AuthService extends ChangeNotifier {
       );
       
       // Log activity for teacher approval
-      await firestore_service.FirestoreService.logTeacherApproved(
+      await FirestoreService.logTeacherApproved(
         user,
         _currentUser?.id ?? 'admin',
       );
@@ -484,7 +492,7 @@ class AuthService extends ChangeNotifier {
       await FirestoreService.updateUser(rejectedUser);
       
       // Log activity for teacher rejection
-      await firestore_service.FirestoreService.logTeacherRejected(
+      await FirestoreService.logTeacherRejected(
         user,
         _currentUser?.id ?? 'admin',
       );
@@ -616,6 +624,45 @@ class AuthService extends ChangeNotifier {
       _errorMessage = 'Failed to delete user: $e';
       debugPrint('AuthService: Error deleting user: $e');
       return false;
+    }
+  }
+
+  Future<void> _persistCurrentUser() async {
+    if (_currentUser == null) return;
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _userPrefsKey,
+        jsonEncode(_currentUser!.toJson()),
+      );
+    } catch (e) {
+      debugPrint('AuthService: Failed to persist user session: $e');
+    }
+  }
+
+  Future<void> _clearPersistedUser() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove(_userPrefsKey);
+    } catch (e) {
+      debugPrint('AuthService: Failed to clear user session: $e');
+    }
+  }
+
+  Future<void> _restoreSession() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cached = prefs.getString(_userPrefsKey);
+      if (cached == null) return;
+
+      final decoded = jsonDecode(cached) as Map<String, dynamic>;
+      _currentUser = User.fromJson(decoded);
+      debugPrint(
+        'AuthService: Restored session for ${_currentUser?.email} (${_currentUser?.role.name})',
+      );
+      notifyListeners();
+    } catch (e) {
+      debugPrint('AuthService: Failed to restore session: $e');
     }
   }
 }

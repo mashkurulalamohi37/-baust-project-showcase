@@ -6,7 +6,6 @@ import '../models/feedback.dart' as feedback_models;
 import 'firestore_service.dart';
 import 'notification_service.dart';
 import 'auth_service.dart';
-import '../../services/firestore_service.dart' as firestore_service;
 
 class ProjectService extends ChangeNotifier {
   // Singleton instance so project data is shared app-wide
@@ -30,7 +29,7 @@ class ProjectService extends ChangeNotifier {
   bool get isLoading => _isLoading;
 
   List<Project> get featuredProjects => 
-      _projects.where((p) => p.isFeatured).toList();
+      _projects.where((p) => p.isFeatured && p.status != ProjectStatus.hidden && p.status != ProjectStatus.draft && p.status != ProjectStatus.rejected && p.status != ProjectStatus.pending && p.status != ProjectStatus.needsRevision).toList();
 
   List<Project> get trendingProjects => 
       _projects.where((p) => p.status == ProjectStatus.approved)
@@ -208,7 +207,7 @@ class ProjectService extends ChangeNotifier {
         debugPrint('ProjectService: Project added to local list. Total projects: ${_projects.length}');
         
         // Log activity
-        await firestore_service.FirestoreService.logProjectUploaded(projectWithUrls);
+        await FirestoreService.logProjectUploaded(projectWithUrls);
         _setLoading(false);
         notifyListeners();
         debugPrint('ProjectService: Project created successfully and listeners notified');
@@ -274,7 +273,7 @@ class ProjectService extends ChangeNotifier {
       if (statusChanged) {
         await _sendStatusChangeNotifications(originalProject, updatedProject);
         // Log activity for status change
-        await firestore_service.FirestoreService.logProjectStatusChange(
+        await FirestoreService.logProjectStatusChange(
           updatedProject,
           oldStatus,
           updatedProject.status,
@@ -291,6 +290,28 @@ class ProjectService extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('Error updating project: $e');
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  Future<bool> updateProjectAward(String projectId, ProjectAward award) async {
+    _setLoading(true);
+    try {
+      final project = _projects.firstWhere((p) => p.id == projectId);
+      final updatedProject = project.copyWith(award: award);
+      
+      await FirestoreService.updateProject(updatedProject);
+      
+      final index = _projects.indexWhere((p) => p.id == projectId);
+      if (index != -1) {
+        _projects[index] = updatedProject;
+        notifyListeners();
+      }
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      debugPrint('Error updating project award: $e');
       _setLoading(false);
       return false;
     }
@@ -353,6 +374,29 @@ class ProjectService extends ChangeNotifier {
   }
 
   // Review and Rating System
+  Future<void> loadReviewsForProject(String projectId) async {
+    try {
+      final reviews = await FirestoreService.getReviewsByProjectId(projectId);
+      _reviews.removeWhere((r) => r.projectId == projectId);
+      _reviews.addAll(reviews);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading reviews for project: $e');
+    }
+  }
+
+  Future<void> loadReviewsForUser(String userId) async {
+    try {
+      final reviews = await FirestoreService.getReviewsByReviewerId(userId);
+      // Remove existing reviews by this user to avoid duplicates
+      _reviews.removeWhere((r) => r.reviewerId == userId);
+      _reviews.addAll(reviews);
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading reviews for user: $e');
+    }
+  }
+
   Future<bool> addReview(String projectId, double rating, String comment) async {
     _setLoading(true);
     
@@ -360,43 +404,56 @@ class ProjectService extends ChangeNotifier {
       // Get current user from AuthService
       final authService = AuthService();
       final currentUser = authService.currentUser;
+      debugPrint('ProjectService: Adding review - Current user: ${currentUser?.name} (ID: ${currentUser?.id})');
+      
       final reviewerName = currentUser?.name ?? 'Unknown User';
       final reviewerId = currentUser?.id ?? _getCurrentUserId();
+      
+      // Ensure reviewer name is not empty
+      final finalReviewerName = reviewerName.trim().isEmpty ? 'Anonymous Reviewer' : reviewerName;
+      
+      debugPrint('ProjectService: Review details - Reviewer: $finalReviewerName, Rating: $rating, Comment length: ${comment.length}');
       
       final review = Review(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         projectId: projectId,
         reviewerId: reviewerId,
-        reviewerName: reviewerName,
+        reviewerName: finalReviewerName,
         rating: rating,
         comment: comment,
         createdAt: DateTime.now(),
       );
 
+      debugPrint('ProjectService: Saving review to Firestore...');
       await FirestoreService.saveReview(review);
+      debugPrint('ProjectService: Review saved successfully');
       
       // Load reviews for the project to update local cache
-      final projectReviews = await FirestoreService.getReviewsByProjectId(projectId);
-      _reviews.removeWhere((r) => r.projectId == projectId);
-      _reviews.addAll(projectReviews);
+      await loadReviewsForProject(projectId);
+      
+      // Ensure the new review is in the list (handle potential Firestore consistency delay)
+      if (!_reviews.any((r) => r.id == review.id)) {
+        _reviews.add(review);
+      }
       
       // Update project rating
       final project = _projects.firstWhere((p) => p.id == projectId);
       final updatedRating = _calculateAverageRating(projectId);
+      // Use actual count from loaded reviews
+      final currentReviews = _reviews.where((r) => r.projectId == projectId);
       final updatedProject = project.copyWith(
         rating: updatedRating,
-        reviewCount: project.reviewCount + 1,
+        reviewCount: currentReviews.length,
       );
       
       await updateProject(updatedProject);
-      _reviews.add(review);
       
       // Send notification for new review
       final notificationService = NotificationService();
       await notificationService.notifyNewReview(project.authorId, project, review.reviewerName);
       
       // Log activity for review
-      await firestore_service.FirestoreService.logProjectReviewed(project, review.reviewerName);
+      await FirestoreService.logProjectReviewed(project, review.reviewerName);
       
       _setLoading(false);
       notifyListeners();

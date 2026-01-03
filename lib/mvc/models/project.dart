@@ -1,5 +1,6 @@
 import 'review.dart';
 import 'feedback.dart';
+import 'team_member.dart';
 
 class Project {
   final String id;
@@ -27,6 +28,20 @@ class Project {
   final List<ProjectFeedback> feedback;
   final List<ProjectVersion> versions;
   final ProjectType projectType;
+  
+  // Group/Individual project fields
+  final bool isGroupProject; // true for group, false for individual
+  final String? groupName; // Only for group projects
+  final List<TeamMember> teamMembers; // Empty for individual, filled for group
+  final String? driveLink; // Google Drive link for additional resources
+  
+  // Individual project student details
+  final String? studentId; // For individual projects
+  final int? batch; // For individual projects
+  final int? level; // For individual projects
+  final int? term; // For individual projects
+  final Semester semester; // Summer or Winter
+  final ProjectAward award;
 
   const Project({
     required this.id,
@@ -36,6 +51,7 @@ class Project {
     required this.authorName,
     required this.category,
     required this.year,
+    required this.semester,
     this.supervisor,
     required this.createdAt,
     required this.updatedAt,
@@ -54,6 +70,15 @@ class Project {
     this.feedback = const [],
     this.versions = const [],
     this.projectType = ProjectType.project,
+    this.isGroupProject = false,
+    this.groupName,
+    this.teamMembers = const [],
+    this.driveLink,
+    this.studentId,
+    this.batch,
+    this.level,
+    this.term,
+    this.award = ProjectAward.none,
   });
 
   Project copyWith({
@@ -64,6 +89,7 @@ class Project {
     String? authorName,
     ProjectCategory? category,
     int? year,
+    Semester? semester,
     String? supervisor,
     DateTime? createdAt,
     DateTime? updatedAt,
@@ -82,6 +108,15 @@ class Project {
     List<ProjectFeedback>? feedback,
     List<ProjectVersion>? versions,
     ProjectType? projectType,
+    bool? isGroupProject,
+    String? groupName,
+    List<TeamMember>? teamMembers,
+    String? driveLink,
+    String? studentId,
+    int? batch,
+    int? level,
+    int? term,
+    ProjectAward? award,
   }) {
     return Project(
       id: id ?? this.id,
@@ -91,6 +126,7 @@ class Project {
       authorName: authorName ?? this.authorName,
       category: category ?? this.category,
       year: year ?? this.year,
+      semester: semester ?? this.semester,
       supervisor: supervisor ?? this.supervisor,
       createdAt: createdAt ?? this.createdAt,
       updatedAt: updatedAt ?? this.updatedAt,
@@ -109,6 +145,15 @@ class Project {
       feedback: feedback ?? this.feedback,
       versions: versions ?? this.versions,
       projectType: projectType ?? this.projectType,
+      isGroupProject: isGroupProject ?? this.isGroupProject,
+      groupName: groupName ?? this.groupName,
+      teamMembers: teamMembers ?? this.teamMembers,
+      driveLink: driveLink ?? this.driveLink,
+      studentId: studentId ?? this.studentId,
+      batch: batch ?? this.batch,
+      level: level ?? this.level,
+      term: term ?? this.term,
+      award: award ?? this.award,
     );
   }
 
@@ -121,6 +166,7 @@ class Project {
       'authorName': authorName,
       'category': category.name,
       'year': year,
+      'semester': semester.name,
       'supervisor': supervisor,
       'createdAt': createdAt.toIso8601String(),
       'updatedAt': updatedAt.toIso8601String(),
@@ -139,6 +185,15 @@ class Project {
       'feedback': feedback.map((f) => f.toMap()).toList(),
       'versions': versions.map((v) => v.toMap()).toList(),
       'projectType': projectType.name,
+      'isGroupProject': isGroupProject,
+      'groupName': groupName,
+      'teamMembers': teamMembers.map((m) => m.toMap()).toList(),
+      'driveLink': driveLink,
+      'studentId': studentId,
+      'batch': batch,
+      'level': level,
+      'term': term,
+      'award': award.name,
     };
   }
 }
@@ -163,6 +218,11 @@ enum ProjectType {
   thesis,
 }
 
+enum Semester {
+  summer,
+  winter,
+}
+
 enum ProjectStatus {
   draft,
   pending,
@@ -171,6 +231,15 @@ enum ProjectStatus {
   featured,
   needsRevision,
   resubmitted,
+  hidden,
+}
+
+enum ProjectAward {
+  none,
+  winner,
+  firstRunnerUp,
+  secondRunnerUp,
+  thirdRunnerUp,
 }
 
 extension ProjectTypeExtension on ProjectType {
@@ -180,6 +249,34 @@ extension ProjectTypeExtension on ProjectType {
         return 'Project';
       case ProjectType.thesis:
         return 'Thesis';
+    }
+  }
+}
+
+extension SemesterExtension on Semester {
+  String get displayName {
+    switch (this) {
+      case Semester.summer:
+        return 'Summer';
+      case Semester.winter:
+        return 'Winter';
+    }
+  }
+}
+
+extension ProjectAwardExtension on ProjectAward {
+  String get displayName {
+    switch (this) {
+      case ProjectAward.none:
+        return '';
+      case ProjectAward.winner:
+        return 'Winner';
+      case ProjectAward.firstRunnerUp:
+        return '1st Runner Up';
+      case ProjectAward.secondRunnerUp:
+        return '2nd Runner Up';
+      case ProjectAward.thirdRunnerUp:
+        return '3rd Runner Up';
     }
   }
 }
@@ -232,6 +329,8 @@ extension ProjectStatusExtension on ProjectStatus {
         return 'Needs Revision';
       case ProjectStatus.resubmitted:
         return 'Resubmitted';
+      case ProjectStatus.hidden:
+        return 'Hidden';
     }
   }
 }
@@ -277,4 +376,5 @@ class ProjectVersion {
     };
   }
 }
+
 
