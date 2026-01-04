@@ -1,15 +1,18 @@
 {
     "name": "BAUST Project Showcase",
     "short_name": "BAUST Projects",
-    "start_url": "/",
-    "scope": "/",
+    "start_url": "index.html",
+    "scope": "./",
     "display": "standalone",
     "background_color": "#1a1a2e",
     "theme_color": "#0f3460",
     "description": "BAUST Project Showcase - Discover and share academic projects, thesis work, and research from Bangladesh Army University of Science and Technology",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
-    "categories": ["education", "productivity"],
+    "categories": [
+        "education",
+        "productivity"
+    ],
     "lang": "en-US",
     "dir": "ltr",
     "icons": [
@@ -50,7 +53,7 @@
             "name": "Explore Projects",
             "short_name": "Explore",
             "description": "Browse trending and featured projects",
-            "url": "/?action=explore",
+            "url": "index.html?action=explore",
             "icons": [
                 {
                     "src": "icons/Icon-192.png",
@@ -62,7 +65,7 @@
             "name": "Upload Project",
             "short_name": "Upload",
             "description": "Submit your project",
-            "url": "/?action=upload",
+            "url": "index.html?action=upload",
             "icons": [
                 {
                     "src": "icons/Icon-192.png",
