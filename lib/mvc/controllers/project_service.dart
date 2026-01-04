@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'dart:io';
 import '../models/project.dart';
 import '../models/review.dart';
+import '../models/user.dart';
 import '../models/feedback.dart' as feedback_models;
 import 'firestore_service.dart';
 import 'notification_service.dart';
@@ -408,17 +409,19 @@ class ProjectService extends ChangeNotifier {
       
       final reviewerName = currentUser?.name ?? 'Unknown User';
       final reviewerId = currentUser?.id ?? _getCurrentUserId();
+      final reviewerDesignation = currentUser?.designation?.displayName;
       
       // Ensure reviewer name is not empty
       final finalReviewerName = reviewerName.trim().isEmpty ? 'Anonymous Reviewer' : reviewerName;
       
-      debugPrint('ProjectService: Review details - Reviewer: $finalReviewerName, Rating: $rating, Comment length: ${comment.length}');
+      debugPrint('ProjectService: Review details - Reviewer: $finalReviewerName, Designation: $reviewerDesignation, Rating: $rating, Comment length: ${comment.length}');
       
       final review = Review(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         projectId: projectId,
         reviewerId: reviewerId,
         reviewerName: finalReviewerName,
+        reviewerDesignation: reviewerDesignation,
         rating: rating,
         comment: comment,
         createdAt: DateTime.now(),

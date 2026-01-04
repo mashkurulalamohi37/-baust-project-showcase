@@ -375,6 +375,7 @@ class _SignupFormState extends State<_SignupForm> {
   final _employeeIdController = TextEditingController();
   final _phoneController = TextEditingController();
   late UserRole _selectedRole;
+  Designation _designation = Designation.lecturer;
   bool _hidePassword = true;
   bool _hideConfirm = true;
 
@@ -411,6 +412,7 @@ class _SignupFormState extends State<_SignupForm> {
         department: _selectedRole == UserRole.teacher ? _departmentController.text.trim() : null,
         employeeId: _selectedRole == UserRole.teacher ? _employeeIdController.text.trim() : null,
         phoneNumber: _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
+        designation: _selectedRole == UserRole.teacher ? _designation : null,
       );
 
       if (success && mounted) {
@@ -540,6 +542,30 @@ class _SignupFormState extends State<_SignupForm> {
                         return 'Please enter your department';
                       }
                       return null;
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<Designation>(
+                    value: _designation,
+                    decoration: const InputDecoration(
+                      labelText: 'Designation',
+                      border: OutlineInputBorder(),
+                      prefixIcon: Icon(Icons.work, size: 20),
+                      filled: true,
+                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    ),
+                    items: Designation.values.map((designation) {
+                      return DropdownMenuItem(
+                        value: designation,
+                        child: Text(designation.displayName),
+                      );
+                    }).toList(),
+                    onChanged: (Designation? newValue) {
+                      if (newValue != null) {
+                        setState(() {
+                          _designation = newValue;
+                        });
+                      }
                     },
                   ),
                   const SizedBox(height: 12),

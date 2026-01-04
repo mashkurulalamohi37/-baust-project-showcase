@@ -229,6 +229,7 @@ class AuthService extends ChangeNotifier {
     String? department,
     String? employeeId,
     String? phoneNumber,
+    Designation? designation,
   }) async {
     _setLoading(true);
     _setError(null);
@@ -294,6 +295,7 @@ class AuthService extends ChangeNotifier {
         employeeId: employeeId,
         phoneNumber: phoneNumber,
         lastLoginAt: DateTime.now(),
+        designation: designation,
       );
 
       // Save user to Firestore

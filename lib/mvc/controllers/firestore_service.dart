@@ -107,6 +107,7 @@ class FirestoreService {
         'isActive': user.isActive,
         'createdAt': user.createdAt.toIso8601String(),
         'updatedAt': user.updatedAt.toIso8601String(),
+        'designation': user.designation?.name,
       });
       print('User saved successfully: $normalizedEmail');
     } catch (e) {
@@ -308,12 +309,14 @@ class FirestoreService {
       }
     }
 
+    final role = parseRole();
+
     return User(
       id: _optionalString(data, 'id') ?? docId,
       name: _optionalString(data, 'name') ?? 'User',
       email: normalizedEmail,
       password: _optionalString(data, 'password') ?? '',
-      role: parseRole(),
+      role: role,
       createdAt: createdAt,
       updatedAt: updatedAt,
       profileImageUrl: _optionalString(data, 'profileImageUrl'),
@@ -327,6 +330,12 @@ class FirestoreService {
       phoneNumber: _optionalString(data, 'phoneNumber'),
       lastLoginAt: _tryParseDate(data['lastLoginAt']),
       isActive: _boolField(data, 'isActive', defaultValue: true),
+      designation: data['designation'] != null
+          ? Designation.values.firstWhere(
+              (e) => e.name == data['designation'],
+              orElse: () => Designation.lecturer,
+            )
+          : (role == UserRole.teacher ? Designation.lecturer : null),
     );
   }
 
@@ -398,9 +407,9 @@ class FirestoreService {
         'approvedAt': user.approvedAt?.toIso8601String(),
         'approvedBy': user.approvedBy,
         'employeeId': user.employeeId,
-        'lastLoginAt': user.lastLoginAt?.toIso8601String(),
         'isActive': user.isActive,
         'updatedAt': updatedAt.toIso8601String(),
+        'designation': user.designation?.name,
       });
       print('User updated successfully: $normalizedEmail');
     } catch (e) {
@@ -442,18 +451,22 @@ class FirestoreService {
           .collection(_usersCollection)
           .where('role', isEqualTo: 'teacher')
           .where('isApproved', isEqualTo: false)
-          .where('isActive', isEqualTo: true)
-          .orderBy('createdAt', descending: true)
           .get();
 
       final users = <User>[];
       for (final doc in query.docs) {
         try {
-          users.add(_userFromData(doc.data(), doc.id));
+          final user = _userFromData(doc.data(), doc.id);
+          if (user.isActive) {
+            users.add(user);
+          }
         } catch (e) {
           print('ERROR: Failed to parse pending teacher ${doc.id}: $e');
         }
       }
+
+      // Sort by creation date locally
+      users.sort((a, b) => b.createdAt.compareTo(a.createdAt));
       return users;
     } catch (e) {
       print('ERROR: Failed to get pending teachers: $e');
@@ -543,6 +556,7 @@ class FirestoreService {
         'groupName': project.groupName,
         'teamMembers': project.teamMembers.map((m) => m.toMap()).toList(),
         'driveLink': project.driveLink,
+        'youtubeUrl': project.youtubeUrl,
         'studentId': project.studentId,
         'batch': project.batch,
         'level': project.level,
@@ -613,6 +627,7 @@ class FirestoreService {
                   .toList() ??
               [],
           driveLink: data['driveLink'],
+          youtubeUrl: data['youtubeUrl'],
           studentId: data['studentId'],
           batch: data['batch'],
           level: data['level'],
@@ -727,6 +742,7 @@ class FirestoreService {
                   .toList() ??
               [],
           driveLink: data['driveLink'],
+          youtubeUrl: data['youtubeUrl'],
           studentId: data['studentId'],
           batch: data['batch'],
           level: data['level'],
@@ -808,6 +824,7 @@ class FirestoreService {
                 .toList() ??
             [],
         driveLink: data['driveLink'],
+        youtubeUrl: data['youtubeUrl'],
         studentId: data['studentId'],
         batch: data['batch'],
         level: data['level'],
@@ -877,15 +894,7 @@ class FirestoreService {
   // Review operations
   static Future<void> saveReview(Review review) async {
     try {
-      await _firestore.collection(_reviewsCollection).doc(review.id).set({
-        'id': review.id,
-        'projectId': review.projectId,
-        'reviewerId': review.reviewerId,
-        'reviewerName': review.reviewerName,
-        'rating': review.rating,
-        'comment': review.comment,
-        'createdAt': review.createdAt.toIso8601String(),
-      });
+      await _firestore.collection(_reviewsCollection).doc(review.id).set(review.toMap());
       print('Review saved successfully for project: ${review.projectId}');
     } catch (e) {
       print('ERROR: Failed to save review: $e');
@@ -901,18 +910,7 @@ class FirestoreService {
           .orderBy('createdAt', descending: true)
           .get();
 
-      return query.docs.map((doc) {
-        final data = doc.data();
-        return Review(
-          id: data['id'],
-          projectId: data['projectId'],
-          reviewerId: data['reviewerId'],
-          reviewerName: data['reviewerName'],
-          rating: (data['rating'] ?? 0.0).toDouble(),
-          comment: data['comment'],
-          createdAt: DateTime.parse(data['createdAt']),
-        );
-      }).toList();
+      return query.docs.map((doc) => Review.fromMap(doc.data())).toList();
     } catch (e) {
       print('ERROR: Failed to get reviews for project: $e');
       return [];
@@ -941,18 +939,7 @@ class FirestoreService {
           .orderBy('createdAt', descending: true)
           .get();
 
-      return query.docs.map((doc) {
-        final data = doc.data();
-        return Review(
-          id: data['id'],
-          projectId: data['projectId'],
-          reviewerId: data['reviewerId'],
-          reviewerName: data['reviewerName'],
-          rating: (data['rating'] ?? 0.0).toDouble(),
-          comment: data['comment'],
-          createdAt: DateTime.parse(data['createdAt']),
-        );
-      }).toList();
+      return query.docs.map((doc) => Review.fromMap(doc.data())).toList();
     } catch (e) {
       print('ERROR: Failed to get reviews by reviewer: $e');
       return [];
@@ -962,18 +949,7 @@ class FirestoreService {
   static Future<List<Review>> getAllReviews() async {
     try {
       final query = await _firestore.collection(_reviewsCollection).get();
-      return query.docs.map((doc) {
-        final data = doc.data();
-        return Review(
-          id: data['id'],
-          projectId: data['projectId'],
-          reviewerId: data['reviewerId'],
-          reviewerName: data['reviewerName'],
-          rating: (data['rating'] ?? 0.0).toDouble(),
-          comment: data['comment'],
-          createdAt: DateTime.parse(data['createdAt']),
-        );
-      }).toList();
+      return query.docs.map((doc) => Review.fromMap(doc.data())).toList();
     } catch (e) {
       print('ERROR: Failed to get all reviews: $e');
       return [];

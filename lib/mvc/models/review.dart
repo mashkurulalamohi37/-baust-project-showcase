@@ -3,6 +3,7 @@ class Review {
   final String projectId;
   final String reviewerId;
   final String reviewerName;
+  final String? reviewerDesignation;
   final double rating;
   final String comment;
   final DateTime createdAt;
@@ -12,6 +13,7 @@ class Review {
     required this.projectId,
     required this.reviewerId,
     required this.reviewerName,
+    this.reviewerDesignation,
     required this.rating,
     required this.comment,
     required this.createdAt,
@@ -23,6 +25,7 @@ class Review {
       'projectId': projectId,
       'reviewerId': reviewerId,
       'reviewerName': reviewerName,
+      'reviewerDesignation': reviewerDesignation,
       'rating': rating,
       'comment': comment,
       'createdAt': createdAt.toIso8601String(),
@@ -35,6 +38,7 @@ class Review {
       projectId: map['projectId'] ?? '',
       reviewerId: map['reviewerId'] ?? '',
       reviewerName: map['reviewerName'] ?? '',
+      reviewerDesignation: map['reviewerDesignation'],
       rating: (map['rating'] ?? 0.0).toDouble(),
       comment: map['comment'] ?? '',
       createdAt: DateTime.parse(map['createdAt'] ?? DateTime.now().toIso8601String()),
@@ -46,6 +50,7 @@ class Review {
     String? projectId,
     String? reviewerId,
     String? reviewerName,
+    String? reviewerDesignation,
     double? rating,
     String? comment,
     DateTime? createdAt,
@@ -55,6 +60,7 @@ class Review {
       projectId: projectId ?? this.projectId,
       reviewerId: reviewerId ?? this.reviewerId,
       reviewerName: reviewerName ?? this.reviewerName,
+      reviewerDesignation: reviewerDesignation ?? this.reviewerDesignation,
       rating: rating ?? this.rating,
       comment: comment ?? this.comment,
       createdAt: createdAt ?? this.createdAt,

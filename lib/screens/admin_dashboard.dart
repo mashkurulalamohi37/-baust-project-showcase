@@ -1288,6 +1288,16 @@ class _TeacherApprovalCard extends StatelessWidget {
                           color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                         ),
                       ),
+                      if (teacher.designation != null)
+                        Text(
+                          teacher.designation!.displayName,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      if (teacher.designation != null)
+                        const SizedBox(height: 2),
                       if (teacher.department != null)
                         Text(
                           teacher.department!,
@@ -1354,7 +1364,7 @@ class _UserCard extends StatelessWidget {
           ),
         ),
         title: Text(user.name),
-        subtitle: Text('${user.role.displayName} • ${user.email}'),
+        subtitle: Text('${user.designation != null ? '${user.designation!.displayName} • ' : ''}${user.role.displayName} • ${user.email}'),
         trailing: PopupMenuButton<String>(
           onSelected: (String value) {
             // Handle user actions
@@ -1782,6 +1792,14 @@ class _UserManagementCard extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                         maxLines: 1,
                       ),
+                      if (user.role == UserRole.teacher && user.designation != null)
+                        Text(
+                          user.designation!.displayName,
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Theme.of(context).colorScheme.primary,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       Wrap(
                         spacing: 8,
                         runSpacing: 4,

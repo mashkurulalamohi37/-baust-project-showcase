@@ -282,7 +282,8 @@ class _UploadTabState extends State<_UploadTab> {
   final List<String> _selectedImagePaths = <String>[];
   String? _selectedPdfPath;
   List<User> _approvedTeachers = [];
-  String? _selectedTeacherId; // No default - must select a teacher
+  String? _selectedTeacherId; // No default - must select a teacher for approval
+  String? _selectedSupervisorId; // Supervisor selection (optional, can be same as approver)
   bool _isLoadingTeachers = false;
   
   ProjectCategory _selectedCategory = ProjectCategory.other;
@@ -304,6 +305,9 @@ class _UploadTabState extends State<_UploadTab> {
   
   // Drive link
   final _driveLinkController = TextEditingController();
+  
+  // YouTube link
+  final _youtubeLinkController = TextEditingController();
 
   @override
   void initState() {
@@ -338,6 +342,7 @@ class _UploadTabState extends State<_UploadTab> {
     _levelController.dispose();
     _termController.dispose();
     _driveLinkController.dispose();
+    _youtubeLinkController.dispose();
     for (var controllers in _teamMemberControllers) {
       controllers.values.forEach((c) => c.dispose());
     }
@@ -404,7 +409,11 @@ class _UploadTabState extends State<_UploadTab> {
         return;
       }
       
-      final supervisorName = selectedTeacher.name;
+      // Get supervisor name - use selected supervisor if provided, otherwise use approving teacher
+      final supervisorTeacher = _selectedSupervisorId != null
+          ? _approvedTeachers.firstWhere((t) => t.id == _selectedSupervisorId)
+          : selectedTeacher;
+      final supervisorName = supervisorTeacher.name;
 
       // Build team members list if group project
       final List<TeamMember> teamMembers = [];
@@ -443,6 +452,7 @@ class _UploadTabState extends State<_UploadTab> {
         groupName: _isGroupProject ? _groupNameController.text.trim() : null,
         teamMembers: teamMembers,
         driveLink: _driveLinkController.text.trim().isNotEmpty ? _driveLinkController.text.trim() : null,
+        youtubeUrl: _youtubeLinkController.text.trim().isNotEmpty ? _youtubeLinkController.text.trim() : null,
         studentId: !_isGroupProject ? _studentIdController.text.trim() : null,
         batch: !_isGroupProject ? int.tryParse(_batchController.text) : null,
         level: !_isGroupProject ? int.tryParse(_levelController.text) : null,
@@ -669,6 +679,7 @@ class _UploadTabState extends State<_UploadTab> {
     _levelController.clear();
     _termController.clear();
     _driveLinkController.clear();
+    _youtubeLinkController.clear();
     for (var controllers in _teamMemberControllers) {
       controllers.values.forEach((c) => c.clear());
     }
@@ -679,6 +690,7 @@ class _UploadTabState extends State<_UploadTab> {
       _selectedImagePaths.clear();
       _selectedPdfPath = null;
       _selectedTeacherId = null; // Reset to require selection
+      _selectedSupervisorId = null; // Reset supervisor selection
       _isGroupProject = false;
       _numberOfMembers = 2;
       _initializeTeamMembers();
@@ -1056,10 +1068,21 @@ class _UploadTabState extends State<_UploadTab> {
               TextFormField(
                 controller: _githubController,
                 decoration: const InputDecoration(
-                  labelText: 'GitHub URL (Optional)',
+                  labelText: 'GitHub URL *',
                   hintText: 'https://github.com/username/repository',
                   prefixIcon: Icon(Icons.code),
+                  helperText: 'Link to your project repository',
                 ),
+                validator: (value) {
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter GitHub URL';
+                  }
+                  // Basic validation
+                  if (!value.toLowerCase().contains('github.com')) {
+                     return 'Please enter a valid GitHub URL';
+                  }
+                  return null;
+                },
               ),
               const SizedBox(height: 16),
             ],
@@ -1366,6 +1389,26 @@ class _UploadTabState extends State<_UploadTab> {
                 return null;
               },
             ),
+            const SizedBox(height: 16),
+            
+            TextFormField(
+              controller: _youtubeLinkController,
+              decoration: const InputDecoration(
+                labelText: 'YouTube Video Link (optional)',
+                hintText: 'https://www.youtube.com/watch?v=...',
+                prefixIcon: Icon(Icons.video_library),
+                helperText: 'Add a YouTube video demo of your project',
+              ),
+              validator: (value) {
+                if (value != null && value.trim().isNotEmpty) {
+                  // YouTube URL validation
+                  if (!value.trim().contains('youtube.com') && !value.trim().contains('youtu.be')) {
+                    return 'Please enter a valid YouTube URL';
+                  }
+                }
+                return null;
+              },
+            ),
             const SizedBox(height: 24),
 
             DropdownButtonFormField<String>(
@@ -1384,7 +1427,11 @@ class _UploadTabState extends State<_UploadTab> {
               items: _approvedTeachers.map(
                 (teacher) => DropdownMenuItem(
                   value: teacher.id,
-                  child: Text(teacher.name),
+                  child: Text(
+                    teacher.designation != null 
+                        ? '${teacher.name} (${teacher.designation!.displayName})'
+                        : teacher.name,
+                  ),
                 ),
               ).toList(),
               onChanged: _isLoadingTeachers ? null : (value) {
@@ -1416,6 +1463,43 @@ class _UploadTabState extends State<_UploadTab> {
                   ),
                 ),
               ),
+            const SizedBox(height: 24),
+
+            // Supervisor Selection
+            DropdownButtonFormField<String>(
+              value: (_selectedSupervisorId != null && 
+                      _approvedTeachers.any((t) => t.id == _selectedSupervisorId))
+                  ? _selectedSupervisorId
+                  : null,
+              decoration: const InputDecoration(
+                labelText: 'Select Supervisor *',
+                hintText: 'Choose a supervisor',
+                prefixIcon: Icon(Icons.school),
+                helperText: 'Select the teacher supervising this project',
+              ),
+              isExpanded: true,
+              items: _approvedTeachers.map(
+                (teacher) => DropdownMenuItem(
+                  value: teacher.id,
+                  child: Text(
+                    teacher.designation != null 
+                        ? '${teacher.name} (${teacher.designation!.displayName})'
+                        : teacher.name,
+                  ),
+                ),
+              ).toList(),
+              onChanged: _isLoadingTeachers ? null : (value) {
+                 if (value != null) {
+                   setState(() => _selectedSupervisorId = value);
+                 }
+              },
+              validator: (value) {
+                if (value == null || value.isEmpty) {
+                  return 'Please select a supervisor';
+                }
+                return null;
+              },
+            ),
             const SizedBox(height: 24),
 
             // File Upload Section

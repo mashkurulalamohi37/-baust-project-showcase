@@ -17,6 +17,7 @@ class User {
   final String? phoneNumber; // Contact information
   final DateTime? lastLoginAt; // Track last login
   final bool isActive; // Account status
+  final Designation? designation; // Designation for teachers
 
   const User({
     required this.id,
@@ -37,6 +38,7 @@ class User {
     this.phoneNumber,
     this.lastLoginAt,
     this.isActive = true,
+    this.designation,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -63,6 +65,12 @@ class User {
           ? DateTime.parse(json['lastLoginAt'] as String)
           : null,
       isActive: json['isActive'] as bool? ?? true,
+      designation: json['designation'] != null
+          ? Designation.values.firstWhere(
+              (e) => e.name == json['designation'],
+              orElse: () => Designation.lecturer,
+            )
+          : (json['role'] == 'teacher' ? Designation.lecturer : null),
     );
   }
 
@@ -86,6 +94,7 @@ class User {
       'phoneNumber': phoneNumber,
       'lastLoginAt': lastLoginAt?.toIso8601String(),
       'isActive': isActive,
+      'designation': designation?.name,
     };
   }
 
@@ -108,6 +117,7 @@ class User {
     String? phoneNumber,
     DateTime? lastLoginAt,
     bool? isActive,
+    Designation? designation,
   }) {
     return User(
       id: id ?? this.id,
@@ -128,6 +138,7 @@ class User {
       phoneNumber: phoneNumber ?? this.phoneNumber,
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       isActive: isActive ?? this.isActive,
+      designation: designation ?? this.designation,
     );
   }
 
@@ -146,6 +157,31 @@ enum UserRole {
   student,
   teacher,
   admin,
+}
+
+enum Designation {
+  departmentHead,
+  professor,
+  associateProfessor,
+  assistantProfessor,
+  lecturer,
+}
+
+extension DesignationExtension on Designation {
+  String get displayName {
+    switch (this) {
+      case Designation.departmentHead:
+        return 'Department Head';
+      case Designation.professor:
+        return 'Professor';
+      case Designation.associateProfessor:
+        return 'Associate Professor';
+      case Designation.assistantProfessor:
+        return 'Assistant Professor';
+      case Designation.lecturer:
+        return 'Lecturer';
+    }
+  }
 }
 
 extension UserRoleExtension on UserRole {

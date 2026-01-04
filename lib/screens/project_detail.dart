@@ -5,8 +5,10 @@ import '../mvc/models/review.dart';
 import '../mvc/models/feedback.dart' as feedback_models;
 import '../mvc/controllers/project_service.dart';
 import '../mvc/controllers/auth_service.dart';
+import '../mvc/controllers/firestore_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
   const ProjectDetailScreen({
@@ -28,18 +30,62 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   final _ratingController = TextEditingController();
   double _rating = 0.0;
   bool _isSubmitting = false;
+  User? _facultyUser;
+  YoutubePlayerController? _youtubeController;
+  final GlobalKey _playerKey = GlobalKey();
 
   @override
   void initState() {
     super.initState();
     // Load reviews for this project
     widget.projectService.loadReviewsForProject(widget.project.id);
+    _loadFacultyDetails();
+    _initYoutubeController();
+  }
+
+  void _initYoutubeController() {
+    if (widget.project.youtubeUrl != null && widget.project.youtubeUrl!.isNotEmpty) {
+      String? videoId = YoutubePlayer.convertUrlToId(widget.project.youtubeUrl!);
+      if (videoId != null) {
+        _youtubeController = YoutubePlayerController(
+          initialVideoId: videoId,
+          flags: const YoutubePlayerFlags(
+            autoPlay: false,
+            mute: false,
+            enableCaption: true,
+            controlsVisibleAtStart: true,
+            forceHD: false,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _loadFacultyDetails() async {
+    debugPrint('Loading faculty details for facultyId: ${widget.project.facultyId}');
+    if (widget.project.facultyId != null) {
+      try {
+        final user = await FirestoreService.getUser(widget.project.facultyId!);
+        debugPrint('Faculty user loaded: ${user?.name}, designation: ${user?.designation?.displayName}');
+        if (mounted && user != null) {
+          setState(() {
+            _facultyUser = user;
+          });
+          debugPrint('Faculty user set in state: ${_facultyUser?.name}, designation: ${_facultyUser?.designation?.displayName}');
+        }
+      } catch (e) {
+        debugPrint('Error loading faculty details: $e');
+      }
+    } else {
+      debugPrint('No facultyId found in project');
+    }
   }
 
   @override
   void dispose() {
     _commentController.dispose();
     _ratingController.dispose();
+    _youtubeController?.dispose();
     super.dispose();
   }
 
@@ -95,6 +141,71 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    if (_youtubeController != null) {
+      return CustomYoutubePlayerBuilder(
+        controller: _youtubeController!,
+        player: Stack(
+          key: _playerKey,
+          alignment: Alignment.center,
+          children: [
+            YoutubePlayer(
+              controller: _youtubeController!,
+              showVideoProgressIndicator: true,
+              progressIndicatorColor: Colors.red,
+              progressColors: const ProgressBarColors(
+                playedColor: Colors.red,
+                handleColor: Colors.redAccent,
+                bufferedColor: Colors.grey,
+                backgroundColor: Colors.black12,
+              ),
+            ),
+            // Seek Gesture Detectors
+            Positioned.fill(
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onDoubleTap: () {
+                        final current = _youtubeController!.value.position;
+                        final newPos =
+                            current - const Duration(seconds: 10);
+                        _youtubeController!.seekTo(
+                          newPos < Duration.zero ? Duration.zero : newPos,
+                        );
+                      },
+                      child: Container(),
+                    ),
+                  ),
+                  Expanded(
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.translucent,
+                      onDoubleTap: () {
+                        final current = _youtubeController!.value.position;
+                        final total = _youtubeController!.metadata.duration;
+                        final newPos =
+                            current + const Duration(seconds: 10);
+                        _youtubeController!.seekTo(
+                          newPos > total ? total : newPos,
+                        );
+                      },
+                      child: Container(),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        builder: (context, player) {
+          return _buildScaffold(context, player: player);
+        },
+      );
+    }
+    return _buildScaffold(context);
+  }
+
+  Widget _buildScaffold(BuildContext context, {Widget? player}) {
     final project = widget.project;
 
     return Scaffold(
@@ -149,7 +260,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                             ),
                           ),
                           Chip(
-                            label: Text(currentProject.status.displayName),
+                            label: Text(
+                              currentProject.status.displayName,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                             backgroundColor: _getStatusColor(currentProject.status, context),
                           ),
                         ],
@@ -167,47 +284,112 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                       // Show supervisor info if available
                       if (currentProject.supervisor != null && currentProject.supervisor!.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            const Icon(Icons.school, size: 16, color: Colors.blue),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Supervisor: ${currentProject.supervisor}',
-                              style: TextStyle(
-                                color: Colors.blue[700],
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+                        FutureBuilder<List<User>>(
+                          future: FirestoreService.getAllUsers(),
+                          builder: (context, snapshot) {
+                            // Find supervisor by name from teacher list
+                            User? supervisorUser;
+                            if (snapshot.hasData) {
+                              try {
+                                // Filter for teachers only, then find by name
+                                final teachers = snapshot.data!.where((u) => u.role == UserRole.teacher).toList();
+                                supervisorUser = teachers.firstWhere(
+                                  (user) => user.name == currentProject.supervisor,
+                                );
+                              } catch (e) {
+                                // Supervisor not found in teacher list
+                              }
+                            }
+
+                            return Row(
+                              children: [
+                                const Icon(Icons.school, size: 16, color: Colors.blue),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: TextStyle(
+                                        color: Colors.blue[700],
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 14,
+                                      ),
+                                      children: [
+                                        const TextSpan(text: 'Supervisor: '),
+                                        TextSpan(text: currentProject.supervisor),
+                                        if (supervisorUser?.designation != null)
+                                          TextSpan(
+                                            text: ' (${supervisorUser!.designation!.displayName})',
+                                            style: TextStyle(
+                                              fontStyle: FontStyle.italic,
+                                              color: Colors.blue[600],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ],
                       // Show faculty (approver) info if available
                       if (currentProject.facultyName != null && currentProject.facultyName!.isNotEmpty) ...[
                         const SizedBox(height: 8),
-                        Row(
-                          children: [
-                            Icon(
-                              currentProject.status == ProjectStatus.approved
-                                  ? Icons.verified
-                                  : Icons.person,
-                              size: 16,
-                              color: currentProject.status == ProjectStatus.approved
-                                  ? Colors.green
-                                  : Colors.orange,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              currentProject.status == ProjectStatus.approved
-                                  ? 'Approved by: ${currentProject.facultyName}'
-                                  : 'Assigned to: ${currentProject.facultyName}',
-                              style: TextStyle(
-                                color: currentProject.status == ProjectStatus.approved
-                                    ? Colors.green[700]
-                                    : Colors.orange[700],
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
+                        FutureBuilder<User?>(
+                          future: currentProject.facultyId != null 
+                              ? FirestoreService.getUser(currentProject.facultyId!)
+                              : null,
+                          builder: (context, snapshot) {
+                            final facultyUser = snapshot.data;
+                            return Row(
+                              children: [
+                                Icon(
+                                  currentProject.status == ProjectStatus.approved
+                                      ? Icons.verified
+                                      : Icons.person,
+                                  size: 16,
+                                  color: currentProject.status == ProjectStatus.approved
+                                      ? Colors.green
+                                      : Colors.orange,
+                                ),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: TextStyle(
+                                        color: currentProject.status == ProjectStatus.approved
+                                            ? Colors.green[700]
+                                            : Colors.orange[700],
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 14,
+                                      ),
+                                      children: [
+                                        TextSpan(
+                                          text: currentProject.status == ProjectStatus.approved
+                                              ? 'Approved by: '
+                                              : 'Assigned to: ',
+                                        ),
+                                        TextSpan(
+                                          text: currentProject.facultyName,
+                                        ),
+                                        if (facultyUser?.designation != null)
+                                          TextSpan(
+                                            text: ' (${facultyUser!.designation!.displayName})',
+                                            style: TextStyle(
+                                              fontStyle: FontStyle.italic,
+                                              color: currentProject.status == ProjectStatus.approved
+                                                  ? Colors.green[600]
+                                                  : Colors.orange[600],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
                         ),
                       ],
                     ],
@@ -227,6 +409,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 Text('Project Images', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 _buildImageGallery(currentProject.imageUrls),
+                const SizedBox(height: 16),
+              ],
+
+              // YouTube Video Section
+              if (currentProject.youtubeUrl != null && currentProject.youtubeUrl!.isNotEmpty) ...[
+                Text('Project Demo Video', style: Theme.of(context).textTheme.titleMedium),
+                const SizedBox(height: 8),
+                if (player != null)
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: player,
+                  )
+                else
+                  _buildInvalidYoutubeCard(),
                 const SizedBox(height: 16),
               ],
 
@@ -432,6 +628,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     label: const Text('View Additional Resources (Drive)'),
                     style: FilledButton.styleFrom(
                       backgroundColor: Colors.green[700],
+                      foregroundColor: Colors.white,
                       padding: const EdgeInsets.all(16),
                     ),
                   ),
@@ -487,7 +684,25 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     title: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text(review.reviewerName.isNotEmpty ? review.reviewerName : 'Anonymous Reviewer'),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              review.reviewerName.isNotEmpty ? review.reviewerName : 'Anonymous Reviewer',
+                              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (review.reviewerDesignation != null && review.reviewerDesignation!.isNotEmpty)
+                              Text(
+                                review.reviewerDesignation!,
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                  color: Theme.of(context).colorScheme.primary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                          ],
+                        ),
                         const SizedBox(height: 4),
                         Row(
                           children: List.generate(5, (index) => Icon(
@@ -506,33 +721,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                   ),
                 )),
               
-              // Show message for students about commenting restrictions
-              if (widget.authService?.canCommentOnProjects() != true) ...[
-                const SizedBox(height: 16),
-                Card(
-                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            'Students can view projects and reviews but cannot comment or rate. Only teachers can provide feedback.',
-                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
             ],
           );
         },
@@ -1300,6 +1488,42 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       }
     }
   }
+
+
+
+  Widget _buildInvalidYoutubeCard() {
+    return Card(
+      color: Colors.orange[50],
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Row(
+          children: [
+            Icon(Icons.error_outline, color: Colors.orange[700]),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Invalid YouTube URL',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.orange[900],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'The provided YouTube link could not be loaded.',
+                    style: TextStyle(fontSize: 12, color: Colors.orange),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _RevisionUploadDialog extends StatefulWidget {
@@ -1512,5 +1736,79 @@ class _RevisionUploadDialogState extends State<_RevisionUploadDialog> {
         setState(() => _isUploading = false);
       }
     }
+  }
+}
+
+class CustomYoutubePlayerBuilder extends StatefulWidget {
+  final Widget player;
+  final Widget Function(BuildContext, Widget) builder;
+  final YoutubePlayerController controller;
+
+  const CustomYoutubePlayerBuilder({
+    Key? key,
+    required this.player,
+    required this.builder,
+    required this.controller,
+  }) : super(key: key);
+
+  @override
+  State<CustomYoutubePlayerBuilder> createState() =>
+      _CustomYoutubePlayerBuilderState();
+}
+
+class _CustomYoutubePlayerBuilderState extends State<CustomYoutubePlayerBuilder> {
+  bool _isFullScreen = false;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addListener(_listener);
+  }
+
+  @override
+  void dispose() {
+    widget.controller.removeListener(_listener);
+    super.dispose();
+  }
+
+  void _listener() {
+    if (widget.controller.value.isFullScreen && !_isFullScreen) {
+      if (mounted) {
+        setState(() => _isFullScreen = true);
+        _pushFullScreen();
+      }
+    } else if (!widget.controller.value.isFullScreen && _isFullScreen) {
+      if (mounted) {
+        setState(() => _isFullScreen = false);
+        Navigator.of(context).maybePop();
+      }
+    }
+  }
+
+  void _pushFullScreen() {
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        pageBuilder: (_, __, ___) => Scaffold(
+          backgroundColor: Colors.black,
+          body: Center(child: widget.player),
+        ),
+        transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
+      ),
+    ).then((_) {
+      if (mounted) {
+        if (widget.controller.value.isFullScreen) {
+          widget.controller.toggleFullScreenMode();
+        }
+        setState(() => _isFullScreen = false);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isFullScreen) {
+      return widget.builder(context, Container(color: Colors.black));
+    }
+    return widget.builder(context, widget.player);
   }
 }

@@ -34,6 +34,7 @@ class Project {
   final String? groupName; // Only for group projects
   final List<TeamMember> teamMembers; // Empty for individual, filled for group
   final String? driveLink; // Google Drive link for additional resources
+  final String? youtubeUrl; // YouTube video link for project demo
   
   // Individual project student details
   final String? studentId; // For individual projects
@@ -74,6 +75,7 @@ class Project {
     this.groupName,
     this.teamMembers = const [],
     this.driveLink,
+    this.youtubeUrl,
     this.studentId,
     this.batch,
     this.level,
@@ -112,6 +114,7 @@ class Project {
     String? groupName,
     List<TeamMember>? teamMembers,
     String? driveLink,
+    String? youtubeUrl,
     String? studentId,
     int? batch,
     int? level,
@@ -149,6 +152,7 @@ class Project {
       groupName: groupName ?? this.groupName,
       teamMembers: teamMembers ?? this.teamMembers,
       driveLink: driveLink ?? this.driveLink,
+      youtubeUrl: youtubeUrl ?? this.youtubeUrl,
       studentId: studentId ?? this.studentId,
       batch: batch ?? this.batch,
       level: level ?? this.level,
@@ -189,6 +193,7 @@ class Project {
       'groupName': groupName,
       'teamMembers': teamMembers.map((m) => m.toMap()).toList(),
       'driveLink': driveLink,
+      'youtubeUrl': youtubeUrl,
       'studentId': studentId,
       'batch': batch,
       'level': level,
