@@ -507,6 +507,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return Colors.amber;
       case ProjectStatus.resubmitted:
         return Colors.blue;
+      case ProjectStatus.hidden:
+        return Colors.blueGrey;
     }
   }
 
@@ -526,6 +528,8 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return Icons.feedback;
       case ProjectStatus.resubmitted:
         return Icons.refresh;
+      case ProjectStatus.hidden:
+        return Icons.visibility_off;
     }
   }
 }

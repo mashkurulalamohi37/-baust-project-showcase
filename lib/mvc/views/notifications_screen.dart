@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import '../controllers/notification_service.dart' as notification_service;
+import '../controllers/auth_service.dart';
+import '../../screens/project_detail.dart';
+import '../controllers/project_service.dart';
+import '../controllers/firestore_service.dart';
+import 'profile_settings_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
@@ -10,7 +15,7 @@ class NotificationsScreen extends StatefulWidget {
 
 class _NotificationsScreenState extends State<NotificationsScreen> {
   final notification_service.NotificationService _notificationService = notification_service.NotificationService();
-  String _currentUserId = 'current_user_id'; // This should come from auth service
+  final AuthService _authService = AuthService();
 
   @override
   void initState() {
@@ -19,7 +24,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 
   Future<void> _loadNotifications() async {
-    await _notificationService.loadUserNotifications(_currentUserId);
+    final userId = _authService.currentUser?.id;
+    if (userId != null) {
+      _notificationService.startListening(userId);
+    }
   }
 
   @override
@@ -31,10 +39,15 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
           IconButton(
             icon: const Icon(Icons.mark_email_read),
             onPressed: () async {
-              await _notificationService.markAllAsRead(_currentUserId);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('All notifications marked as read')),
-              );
+              final userId = _authService.currentUser?.id;
+              if (userId != null) {
+                await _notificationService.markAllAsRead(userId);
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('All notifications marked as read')),
+                  );
+                }
+              }
             },
             tooltip: 'Mark all as read',
           ),
@@ -104,25 +117,48 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
 
     // Handle different notification types
     switch (notification.type) {
-        case notification_service.NotificationType.projectApproved:
-        case notification_service.NotificationType.projectRejected:
-        case notification_service.NotificationType.projectNeedsRevision:
-        case notification_service.NotificationType.projectFeatured:
-        case notification_service.NotificationType.newReview:
+      case notification_service.NotificationType.projectApproved:
+      case notification_service.NotificationType.projectRejected:
+      case notification_service.NotificationType.projectNeedsRevision:
+      case notification_service.NotificationType.projectFeatured:
+      case notification_service.NotificationType.newReview:
+      case notification_service.NotificationType.newProjectPending:
+      case notification_service.NotificationType.projectReviewed:
         if (notification.projectId != null) {
-          // Navigate to project detail
-          // TODO: Implement navigation to project detail
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Navigate to project: ${notification.projectId}')),
-          );
+          // Show loading
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Opening project details...'), duration: Duration(seconds: 1)),
+            );
+          }
+          
+          final project = await FirestoreService.getProjectById(notification.projectId!);
+          if (project != null && mounted) {
+            Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (context) => ProjectDetailScreen(
+                  project: project,
+                  projectService: ProjectService(),
+                  authService: AuthService(),
+                ),
+              ),
+            );
+          } else if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Could not find project details. It may have been deleted.')),
+            );
+          }
         }
         break;
       case notification_service.NotificationType.accountApproved:
       case notification_service.NotificationType.accountRejected:
+      case notification_service.NotificationType.teacherApprovalRequest:
         // Navigate to profile or settings
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Navigate to profile settings')),
-        );
+        if (mounted) {
+           Navigator.of(context).push(
+            MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
+          );
+        }
         break;
       default:
         break;
@@ -294,6 +330,12 @@ class _NotificationCard extends StatelessWidget {
         return Colors.grey;
       case notification_service.NotificationType.general:
         return Colors.teal;
+      case notification_service.NotificationType.newProjectPending:
+        return Colors.amber;
+      case notification_service.NotificationType.projectReviewed:
+        return Colors.indigo;
+      case notification_service.NotificationType.teacherApprovalRequest:
+        return Colors.deepOrange;
     }
   }
 

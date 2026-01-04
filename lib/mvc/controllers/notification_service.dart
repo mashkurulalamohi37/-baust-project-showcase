@@ -1,7 +1,12 @@
 import 'package:flutter/foundation.dart';
+import 'dart:async';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:permission_handler/permission_handler.dart';
 import '../models/project.dart';
 import '../models/user.dart';
 import 'firestore_service.dart';
+import 'auth_service.dart';
 
 class NotificationService extends ChangeNotifier {
   static final NotificationService _instance = NotificationService._internal();
@@ -10,6 +15,13 @@ class NotificationService extends ChangeNotifier {
 
   final List<Notification> _notifications = [];
   bool _isLoading = false;
+  StreamSubscription? _notificationsSubscription;
+  String? _currentListeningUserId;
+  
+  // Local Notifications
+  final FlutterLocalNotificationsPlugin _localNotifications = FlutterLocalNotificationsPlugin();
+  final Set<String> _processedIds = {};
+  bool _isInitialized = false;
 
   List<Notification> get notifications => List.unmodifiable(_notifications);
   bool get isLoading => _isLoading;
@@ -17,6 +29,133 @@ class NotificationService extends ChangeNotifier {
   void _setLoading(bool loading) {
     _isLoading = loading;
     notifyListeners();
+  }
+
+  // Initialize local notifications
+  Future<void> initialize() async {
+    if (_isInitialized) return;
+
+    // Request permissions for Android 13+
+    await Permission.notification.request();
+
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher');
+    
+    const InitializationSettings initializationSettings = InitializationSettings(
+      android: initializationSettingsAndroid,
+    );
+
+    await _localNotifications.initialize(
+      initializationSettings,
+      onDidReceiveNotificationResponse: (NotificationResponse response) {
+        // Handle notification tap if needed
+        debugPrint('Notification tapped: ${response.payload}');
+      },
+    );
+
+    _isInitialized = true;
+    debugPrint('NotificationService: Local notifications initialized');
+  }
+
+  // Show a system notification
+  Future<void> showLocalNotification(Notification notification) async {
+    // Respect user's notification settings from profile
+    final currentUser = AuthService().currentUser;
+    if (currentUser == null || !currentUser.notificationsEnabled) {
+      debugPrint('NotificationService: Skipping local notification - Disabled by user');
+      return;
+    }
+
+    const AndroidNotificationDetails androidPlatformChannelSpecifics =
+        AndroidNotificationDetails(
+      'project_showcase_channel',
+      'Project Showcase Notifications',
+      channelDescription: 'Notifications for project approvals, reviews and updates',
+      importance: Importance.max,
+      priority: Priority.high,
+      showWhen: true,
+    );
+    
+    const NotificationDetails platformChannelSpecifics = NotificationDetails(
+      android: androidPlatformChannelSpecifics,
+    );
+
+    await _localNotifications.show(
+      notification.id.hashCode,
+      notification.title,
+      notification.message,
+      platformChannelSpecifics,
+      payload: notification.projectId,
+    );
+  }
+
+  // Start listening to real-time notifications
+  void startListening(String userId) {
+    if (_currentListeningUserId == userId && _notificationsSubscription != null) {
+      return; // Already listening to this user
+    }
+
+    _stopListening();
+    _currentListeningUserId = userId;
+    
+    debugPrint('NotificationService: Starting real-time listener for user $userId');
+    
+    _notificationsSubscription = FirebaseFirestore.instance
+        .collection('notifications')
+        .where('userId', isEqualTo: userId)
+        .snapshots()
+        .listen((snapshot) {
+          final List<Notification> newNotifications = snapshot.docs.map((doc) {
+            final data = doc.data();
+            if (data['id'] == null) data['id'] = doc.id;
+            return Notification.fromMap(data);
+          }).toList();
+          
+          newNotifications.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          
+          // Check for brand new notifications to show system alert
+          if (_notifications.isNotEmpty || _processedIds.isNotEmpty) {
+            for (var notification in newNotifications) {
+              if (!_processedIds.contains(notification.id) && !notification.isRead) {
+                // This is a new unread notification
+                showLocalNotification(notification);
+                _processedIds.add(notification.id);
+              }
+            }
+          } else {
+            // First load: just populate processed IDs so we don't spam old ones
+            for (var notification in newNotifications) {
+              _processedIds.add(notification.id);
+            }
+          }
+          
+          _notifications.clear();
+          _notifications.addAll(newNotifications);
+          notifyListeners();
+          debugPrint('NotificationService: Current unread count: $unreadCount');
+        }, onError: (error) {
+          debugPrint('NotificationService: Stream error: $error');
+        });
+  }
+
+  // Stop listening and clear data
+  void clearNotifications() {
+    _stopListening();
+    _notifications.clear();
+    _processedIds.clear();
+    notifyListeners();
+  }
+
+  void _stopListening() {
+    _notificationsSubscription?.cancel();
+    _notificationsSubscription = null;
+    _currentListeningUserId = null;
+  }
+
+  @override
+  void dispose() {
+    _stopListening();
+    super.dispose();
   }
 
   // Load notifications for a user
@@ -56,6 +195,13 @@ class NotificationService extends ChangeNotifier {
     String? actionData,
   }) async {
     try {
+      // Check if user has notifications enabled
+      final user = await FirestoreService.getUserById(userId);
+      if (user == null || !user.notificationsEnabled) {
+        debugPrint('Notification not sent: User $userId has notifications disabled');
+        return false;
+      }
+
       final notification = Notification(
         id: DateTime.now().millisecondsSinceEpoch.toString(),
         userId: userId,
@@ -216,6 +362,100 @@ class NotificationService extends ChangeNotifier {
       type: NotificationType.accountRejected,
     );
   }
+
+  // New notification methods for the three scenarios
+
+  /// Notify all approved teachers when a new project is submitted for approval
+  Future<bool> notifyTeachersNewProjectPending(Project project) async {
+    try {
+      // Get all approved teachers
+      final teachers = await FirestoreService.getAllUsers();
+      final approvedTeachers = teachers.where(
+        (user) => user.role == UserRole.teacher && user.isApproved,
+      ).toList();
+
+      // Send notification to each teacher
+      for (final teacher in approvedTeachers) {
+        await sendNotification(
+          userId: teacher.id,
+          title: 'New Project for Review 📝',
+          message: 'A new project "${project.title}" by ${project.authorName} is pending approval.',
+          type: NotificationType.newProjectPending,
+          projectId: project.id,
+        );
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Error notifying teachers of new project: $e');
+      return false;
+    }
+  }
+
+  /// Notify student when their project is reviewed/approved/rejected by a teacher
+  Future<bool> notifyStudentProjectReviewed(
+    String studentId,
+    Project project,
+    String teacherName,
+    ProjectStatus newStatus,
+  ) async {
+    String title = '';
+    String message = '';
+
+    switch (newStatus) {
+      case ProjectStatus.approved:
+        title = 'Project Approved! 🎉';
+        message = 'Your project "${project.title}" has been approved by $teacherName and is now visible to everyone.';
+        break;
+      case ProjectStatus.rejected:
+        title = 'Project Feedback ❌';
+        message = 'Your project "${project.title}" was reviewed by $teacherName. Please check the feedback and make improvements.';
+        break;
+      case ProjectStatus.needsRevision:
+        title = 'Project Needs Revision 🔄';
+        message = 'Your project "${project.title}" needs revision based on feedback from $teacherName.';
+        break;
+      case ProjectStatus.featured:
+        title = 'Project Featured! ⭐';
+        message = 'Congratulations! Your project "${project.title}" has been featured by $teacherName!';
+        break;
+      default:
+        title = 'Project Status Updated';
+        message = 'Your project "${project.title}" was reviewed by $teacherName.';
+    }
+
+    return await sendNotification(
+      userId: studentId,
+      title: title,
+      message: message,
+      type: NotificationType.projectReviewed,
+      projectId: project.id,
+    );
+  }
+
+  /// Notify all admins when a teacher requests approval
+  Future<bool> notifyAdminsTeacherApprovalRequest(User teacher) async {
+    try {
+      // Get all admins
+      final users = await FirestoreService.getAllUsers();
+      final admins = users.where((user) => user.role == UserRole.admin).toList();
+
+      // Send notification to each admin
+      for (final admin in admins) {
+        await sendNotification(
+          userId: admin.id,
+          title: 'New Teacher Approval Request 👨‍🏫',
+          message: '${teacher.name} (${teacher.email}) has requested teacher account approval.',
+          type: NotificationType.teacherApprovalRequest,
+        );
+      }
+
+      return true;
+    } catch (e) {
+      debugPrint('Error notifying admins of teacher approval request: $e');
+      return false;
+    }
+  }
 }
 
 // Notification model
@@ -281,16 +521,33 @@ class Notification {
   }
 
   factory Notification.fromMap(Map<String, dynamic> map) {
+    DateTime parseDate(dynamic date) {
+      if (date == null) return DateTime.now();
+      if (date is DateTime) return date;
+      if (date is String) return DateTime.tryParse(date) ?? DateTime.now();
+      if (date is Timestamp) return date.toDate();
+      // Try parsing if it's a specific Firestore timestamp structure
+      try {
+        if (date is Map && date.containsKey('_seconds')) {
+          return DateTime.fromMillisecondsSinceEpoch(date['_seconds'] * 1000);
+        }
+      } catch (_) {}
+      return DateTime.now();
+    }
+
     return Notification(
-      id: map['id'],
-      userId: map['userId'],
-      title: map['title'],
-      message: map['message'],
-      type: NotificationType.values.firstWhere((e) => e.name == map['type']),
-      projectId: map['projectId'],
+      id: map['id']?.toString() ?? map['id']?.toString() ?? '',
+      userId: map['userId'] ?? map['user_id'] ?? '',
+      title: map['title'] ?? '',
+      message: map['message'] ?? '',
+      type: NotificationType.values.firstWhere(
+        (e) => e.name == map['type'],
+        orElse: () => NotificationType.general,
+      ),
+      projectId: map['projectId'] ?? map['project_id'],
       actionData: map['actionData'],
-      createdAt: DateTime.parse(map['createdAt']),
-      isRead: map['isRead'] ?? false,
+      createdAt: parseDate(map['createdAt'] ?? map['created_at']),
+      isRead: map['isRead'] ?? map['is_read'] ?? false,
     );
   }
 }
@@ -304,7 +561,10 @@ enum NotificationType {
   accountApproved,
   accountRejected,
   systemMessage,
-  general;
+  general,
+  newProjectPending,      // For teachers when a project needs approval
+  projectReviewed,        // For students when teacher reviews their project
+  teacherApprovalRequest; // For admins when a teacher requests approval
 
   String get displayName {
     switch (this) {
@@ -326,6 +586,12 @@ enum NotificationType {
         return 'System Message';
       case NotificationType.general:
         return 'General';
+      case NotificationType.newProjectPending:
+        return 'New Project for Review';
+      case NotificationType.projectReviewed:
+        return 'Project Reviewed';
+      case NotificationType.teacherApprovalRequest:
+        return 'Teacher Approval Request';
     }
   }
 
@@ -349,6 +615,12 @@ enum NotificationType {
         return '🔔';
       case NotificationType.general:
         return '📢';
+      case NotificationType.newProjectPending:
+        return '📝';
+      case NotificationType.projectReviewed:
+        return '✍️';
+      case NotificationType.teacherApprovalRequest:
+        return '👨‍🏫';
     }
   }
 }

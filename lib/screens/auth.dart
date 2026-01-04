@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../mvc/controllers/auth_service.dart';
 import '../mvc/models/user.dart';
+import '../mvc/views/forgot_password_screen.dart';
 
 typedef RoleSelected = void Function(UserRole role);
 
@@ -321,6 +322,20 @@ class _LoginFormState extends State<_LoginForm> {
                     }
                     return null;
                   },
+                ),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const ForgotPasswordScreen(),
+                        ),
+                      );
+                    },
+                    child: const Text('Forgot Password?'),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 SizedBox(

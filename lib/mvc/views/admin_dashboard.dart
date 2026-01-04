@@ -4,6 +4,7 @@ import '../models/user.dart';
 import '../controllers/project_service.dart';
 import '../controllers/auth_service.dart';
 import 'project_detail.dart';
+import 'profile_settings_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -41,7 +42,12 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         actions: [
           PopupMenuButton<String>(
             onSelected: (String value) async {
-              if (value == 'logout') {
+              if (value == 'profile') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
+                );
+              } else if (value == 'logout') {
                 await _authService.logout();
                 if (mounted) {
                   Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
@@ -1401,6 +1407,8 @@ class _AdminProjectCard extends StatelessWidget {
         return Colors.amber;
       case ProjectStatus.resubmitted:
         return Colors.blue;
+      case ProjectStatus.hidden:
+        return Colors.blueGrey;
     }
   }
 }

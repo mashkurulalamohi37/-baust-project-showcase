@@ -18,6 +18,7 @@ class User {
   final DateTime? lastLoginAt; // Track last login
   final bool isActive; // Account status
   final Designation? designation; // Designation for teachers
+  final bool notificationsEnabled; // Notification preferences
 
   const User({
     required this.id,
@@ -39,6 +40,7 @@ class User {
     this.lastLoginAt,
     this.isActive = true,
     this.designation,
+    this.notificationsEnabled = true, // Notifications enabled by default
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -71,6 +73,7 @@ class User {
               orElse: () => Designation.lecturer,
             )
           : (json['role'] == 'teacher' ? Designation.lecturer : null),
+      notificationsEnabled: json['notificationsEnabled'] as bool? ?? true,
     );
   }
 
@@ -95,6 +98,7 @@ class User {
       'lastLoginAt': lastLoginAt?.toIso8601String(),
       'isActive': isActive,
       'designation': designation?.name,
+      'notificationsEnabled': notificationsEnabled,
     };
   }
 
@@ -118,6 +122,7 @@ class User {
     DateTime? lastLoginAt,
     bool? isActive,
     Designation? designation,
+    bool? notificationsEnabled,
   }) {
     return User(
       id: id ?? this.id,
@@ -139,6 +144,7 @@ class User {
       lastLoginAt: lastLoginAt ?? this.lastLoginAt,
       isActive: isActive ?? this.isActive,
       designation: designation ?? this.designation,
+      notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
     );
   }
 

@@ -11,6 +11,7 @@ import 'mvc/controllers/project_service.dart';
 import 'mvc/models/user.dart';
 import 'mvc/models/project.dart';
 import 'mvc/models/team_member.dart';
+import 'mvc/controllers/notification_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -27,6 +28,9 @@ void main() async {
       options: DefaultFirebaseOptions.currentPlatform,
     );
     debugPrint('Firebase initialized successfully');
+    
+    // Initialize Local Notifications
+    await NotificationService().initialize();
   } catch (e) {
     debugPrint('Firebase initialization error: $e');
     debugPrint('Please check your Firebase configuration in firebase_options.dart');

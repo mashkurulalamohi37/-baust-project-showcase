@@ -5,6 +5,7 @@ import '../models/user.dart';
 import '../controllers/project_service.dart';
 import '../controllers/auth_service.dart';
 import 'project_detail.dart';
+import 'profile_settings_screen.dart';
 import 'search_filter.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
@@ -48,7 +49,12 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           ),
           PopupMenuButton<String>(
             onSelected: (String value) async {
-              if (value == 'logout') {
+              if (value == 'profile') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
+                );
+              } else if (value == 'logout') {
                 await _authService.logout();
                 if (mounted) {
                   Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
@@ -321,6 +327,7 @@ class _UploadTabState extends State<_UploadTab> {
         supervisor: _supervisorController.text.trim().isNotEmpty ? _supervisorController.text.trim() : null,
         facultyName: _supervisorController.text.trim().isNotEmpty ? _supervisorController.text.trim() : null,
         projectType: _selectedProjectType,
+        semester: Semester.summer,
       );
 
       debugPrint('StudentDashboard: Project created, calling createProject service');
@@ -1334,6 +1341,8 @@ class _ProjectCard extends StatelessWidget {
         return Colors.amber;
       case ProjectStatus.resubmitted:
         return Colors.blue;
+      case ProjectStatus.hidden:
+        return Colors.blueGrey;
     }
   }
 }

@@ -209,6 +209,14 @@ class ProjectService extends ChangeNotifier {
         
         // Log activity
         await FirestoreService.logProjectUploaded(projectWithUrls);
+        
+        // Notify teachers of new project pending approval
+        if (projectWithUrls.status == ProjectStatus.pending) {
+          final notificationService = NotificationService();
+          await notificationService.notifyTeachersNewProjectPending(projectWithUrls);
+          debugPrint('ProjectService: Notified teachers of new pending project');
+        }
+        
         _setLoading(false);
         notifyListeners();
         debugPrint('ProjectService: Project created successfully and listeners notified');
@@ -321,29 +329,17 @@ class ProjectService extends ChangeNotifier {
   Future<void> _sendStatusChangeNotifications(Project originalProject, Project updatedProject) async {
     final notificationService = NotificationService();
     
-    switch (updatedProject.status) {
-      case ProjectStatus.approved:
-        if (originalProject.status != ProjectStatus.approved) {
-          await notificationService.notifyProjectApproved(updatedProject.authorId, updatedProject);
-        }
-        break;
-      case ProjectStatus.rejected:
-        if (originalProject.status != ProjectStatus.rejected) {
-          await notificationService.notifyProjectRejected(updatedProject.authorId, updatedProject);
-        }
-        break;
-      case ProjectStatus.featured:
-        if (originalProject.status != ProjectStatus.featured) {
-          await notificationService.notifyProjectFeatured(updatedProject.authorId, updatedProject);
-        }
-        break;
-      case ProjectStatus.needsRevision:
-        if (originalProject.status != ProjectStatus.needsRevision) {
-          await notificationService.notifyProjectNeedsRevision(updatedProject.authorId, updatedProject);
-        }
-        break;
-      default:
-        break;
+    // Get teacher name from the updated project or use a default
+    final teacherName = updatedProject.facultyName ?? 'Teacher';
+    
+    // Use the new unified notification method for all status changes
+    if (originalProject.status != updatedProject.status) {
+      await notificationService.notifyStudentProjectReviewed(
+        updatedProject.authorId,
+        updatedProject,
+        teacherName,
+        updatedProject.status,
+      );
     }
   }
 

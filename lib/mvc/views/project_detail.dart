@@ -370,6 +370,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         return Colors.amber;
       case ProjectStatus.resubmitted:
         return Colors.blue;
+      case ProjectStatus.hidden:
+        return Colors.blueGrey;
     }
   }
 

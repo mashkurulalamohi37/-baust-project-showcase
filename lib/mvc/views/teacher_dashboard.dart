@@ -5,6 +5,7 @@ import '../models/feedback.dart' as feedback_models;
 import '../controllers/project_service.dart';
 import '../controllers/auth_service.dart';
 import 'project_detail.dart';
+import 'profile_settings_screen.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   const TeacherDashboardScreen({super.key});
@@ -42,7 +43,12 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         actions: [
           PopupMenuButton<String>(
             onSelected: (String value) async {
-              if (value == 'logout') {
+              if (value == 'profile') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
+                );
+              } else if (value == 'logout') {
                 await _authService.logout();
                 if (mounted) {
                   Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
@@ -464,14 +470,14 @@ class _AllProjectsTabState extends State<_AllProjectsTab> {
         else
           ...filteredProjects.map((project) => _ProjectReviewCard(
                 project: project,
-                projectService: projectService,
-                authService: authService,
+                projectService: widget.projectService,
+                authService: widget.authService,
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute<void>(
                     builder: (_) => ProjectDetailScreen(
                       project: project,
-                      projectService: projectService,
-                      authService: authService,
+                      projectService: widget.projectService,
+                      authService: widget.authService,
                     ),
                   ),
                 ),
@@ -564,6 +570,7 @@ class _MyReviewsTab extends StatelessWidget {
                 year: DateTime.now().year,
                 createdAt: DateTime.now(),
                 updatedAt: DateTime.now(),
+                semester: Semester.summer,
                 status: ProjectStatus.draft,
               ),
             );
@@ -1041,6 +1048,8 @@ class _ProjectReviewCard extends StatelessWidget {
         return Colors.amber;
       case ProjectStatus.resubmitted:
         return Colors.blue;
+      case ProjectStatus.hidden:
+        return Colors.blueGrey;
     }
   }
 }

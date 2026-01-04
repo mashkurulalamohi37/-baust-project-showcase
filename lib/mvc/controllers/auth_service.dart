@@ -2,8 +2,10 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
 import '../models/user.dart';
 import 'firestore_service.dart';
+import 'notification_service.dart';
 
 class AuthService extends ChangeNotifier {
   // Singleton instance so auth state is shared app-wide
@@ -16,6 +18,7 @@ class AuthService extends ChangeNotifier {
   bool _isLoading = false;
   String? _errorMessage;
   UserRole? _pendingRole; // Store the role selected during login
+  final fb_auth.FirebaseAuth _auth = fb_auth.FirebaseAuth.instance;
   static const String _userPrefsKey = 'auth.currentUser';
 
   // Hardcoded admin credentials
@@ -53,7 +56,7 @@ class AuthService extends ChangeNotifier {
   Future<bool> login(String email, String password, UserRole role) async {
     _setLoading(true);
     _setError(null);
-    _pendingRole = role; // Store the role for later use
+    _pendingRole = role;
     final normalizedEmail = _normalizeEmail(email);
 
     try {
@@ -63,10 +66,8 @@ class AuthService extends ChangeNotifier {
         return false;
       }
 
-      // Check for hardcoded admin credentials
+      // 1. Admin Login (Hardcoded)
       if (normalizedEmail == _adminEmail && password == _adminPassword) {
-        debugPrint('AuthService: Admin login successful');
-        // Create admin user directly
         _currentUser = User(
           id: 'admin_${DateTime.now().millisecondsSinceEpoch}',
           name: 'Admin',
@@ -86,135 +87,94 @@ class AuthService extends ChangeNotifier {
         return true;
       }
 
-      // For regular users, use Firestore
-      debugPrint(
-        'AuthService: Attempting Firestore login for $normalizedEmail with role: $role',
-      );
-
+      // 2. Try Firebase Auth Login first
+      fb_auth.UserCredential? userCredential;
+      bool firebaseAuthSuccess = false;
       try {
-        // Get user from Firestore
-        User? existingUser;
-        try {
-          debugPrint(
-            'AuthService: Checking Firestore for user: $normalizedEmail',
-          );
-          debugPrint(
-            'AuthService: Input email: "$email" -> Normalized: "$normalizedEmail"',
-          );
-          existingUser = await FirestoreService.getUserByEmail(normalizedEmail);
-          if (existingUser != null) {
-            debugPrint(
-              'AuthService: User found - Email: ${existingUser.email}, Role: ${existingUser.role}, Name: ${existingUser.name}',
-            );
-          } else {
-            debugPrint(
-              'AuthService: User not found in Firestore for email: $normalizedEmail',
-            );
-            debugPrint('AuthService: Please verify:');
-            debugPrint('  1. The email is correct');
-            debugPrint('  2. The user account exists in Firestore');
-            debugPrint(
-              '  3. Check Firebase Console -> Firestore Database -> users collection',
-            );
-          }
-        } catch (e, stackTrace) {
-          debugPrint('AuthService: Firestore access failed: $e');
-          debugPrint('AuthService: Stack trace: $stackTrace');
-          debugPrint(
-            'AuthService: Please check Firebase connection and configuration',
-          );
-          _setError(
-            'Login failed: Unable to connect to database. Please check your connection and try again.',
-          );
+        userCredential = await _auth.signInWithEmailAndPassword(
+          email: normalizedEmail,
+          password: password,
+        );
+        firebaseAuthSuccess = true;
+        debugPrint('AuthService: Firebase Auth login successful');
+      } on fb_auth.FirebaseAuthException catch (e) {
+        debugPrint('AuthService: Firebase Auth login failed: ${e.code}');
+        // If user not found in Auth, we check Firestore (Migration mode)
+        if (e.code != 'user-not-found' && e.code != 'wrong-password' && e.code != 'invalid-credential') {
+          _setError('Authentication error: ${e.message}');
           _setLoading(false);
           return false;
         }
+      }
 
-        if (existingUser != null) {
-          debugPrint(
-            'AuthService: User exists in Firestore, checking credentials',
-          );
-          var verifiedUser = existingUser;
-          final now = DateTime.now();
-
-          if (verifiedUser.password.isEmpty) {
-            debugPrint(
-              'AuthService: Legacy account detected without stored password. Updating password.',
-            );
-            verifiedUser = verifiedUser.copyWith(password: password);
-          } else if (verifiedUser.password != password) {
+      // 3. Get/Verify user from Firestore
+      User? existingUser = await FirestoreService.getUserByEmail(normalizedEmail);
+      
+      if (existingUser != null) {
+        // Migration/Auto-Sync logic
+        if (!firebaseAuthSuccess) {
+          // Check password against Firestore record (Legacy)
+          if (existingUser.password == password) {
+            debugPrint('AuthService: Firestore password match. Migrating to Firebase Auth.');
+            try {
+              await _auth.createUserWithEmailAndPassword(email: normalizedEmail, password: password);
+              firebaseAuthSuccess = true;
+            } catch (ignore) {
+              // Might already exist but different password? 
+              // If we reached here, Auth should have thrown user-not-found, so this shouldn't happen.
+            }
+          } else {
             _setError('Invalid password. Please try again.');
             _setLoading(false);
             return false;
           }
+        }
 
-          if (verifiedUser.role != role) {
-            _setError(
-              'Invalid role for this account. Please select the correct role (${verifiedUser.role.displayName}).',
-            );
-            _setLoading(false);
-            return false;
-          }
-
-          if (role == UserRole.teacher && !verifiedUser.isApproved) {
-            _setError(
-              'Your teacher account is pending admin approval. Please contact an administrator.',
-            );
-            _setLoading(false);
-            return false;
-          }
-
-          if (!verifiedUser.isActive) {
-            _setError(
-              'Your account has been deactivated. Please contact an administrator.',
-            );
-            _setLoading(false);
-            return false;
-          }
-
-          verifiedUser = verifiedUser.copyWith(
-            lastLoginAt: now,
-            updatedAt: now,
-          );
-
-          _currentUser = verifiedUser;
-
-          try {
-            await FirestoreService.updateUser(verifiedUser);
-          } catch (e) {
-            debugPrint('Failed to update user in Firestore: $e');
-          }
-
-          await _persistCurrentUser();
-          debugPrint('AuthService: Existing user login successful');
-        } else {
-          // User doesn't exist, show helpful error message
-          debugPrint(
-            'AuthService: No account found for email: $normalizedEmail',
-          );
-          debugPrint('AuthService: Suggestions:');
-          debugPrint('  1. Make sure you have signed up with this email');
-          debugPrint('  2. Check if the email is spelled correctly');
-          debugPrint('  3. Try signing up again if you haven\'t already');
-          _setError(
-            'No account found with this email. Please sign up first or check your email spelling.',
-          );
+        // Check if role matches
+        if (existingUser.role != role) {
+          _setError('Invalid role for this account. Please select correctly.');
           _setLoading(false);
           return false;
         }
 
-        debugPrint('AuthService: Login successful, returning true');
+        // Check approval and active status
+        if (role == UserRole.teacher && !existingUser.isApproved) {
+          _setError('Your teacher account is pending admin approval.');
+          _setLoading(false);
+          return false;
+        }
+        if (!existingUser.isActive) {
+          _setError('Your account has been deactivated.');
+          _setLoading(false);
+          return false;
+        }
+
+        // Sync Firestore password if it was reset via email
+        var verifiedUser = existingUser;
+        if (firebaseAuthSuccess && existingUser.password != password) {
+          debugPrint('AuthService: Syncing Firestore password from Firebase Auth reset');
+          verifiedUser = existingUser.copyWith(password: password);
+        }
+
+        verifiedUser = verifiedUser.copyWith(
+          lastLoginAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+        );
+
+        _currentUser = verifiedUser;
+        await FirestoreService.updateUser(verifiedUser);
+        await _persistCurrentUser();
+        
         _setLoading(false);
         notifyListeners();
         return true;
-      } catch (e) {
-        debugPrint('Login error: $e');
-        _setError('Login failed: ${e.toString()}');
+      } else {
+        _setError('No account found with this email. Please sign up first.');
         _setLoading(false);
         return false;
       }
     } catch (e) {
-      debugPrint('General login error: $e');
+      debugPrint('Login error: $e');
       _setError('Login failed: ${e.toString()}');
       _setLoading(false);
       return false;
@@ -277,70 +237,62 @@ class AuthService extends ChangeNotifier {
         }
       }
 
-      // Create new user
-      final isApproved =
-          role != UserRole.teacher; // Teachers need approval, students don't
-      final user = User(
-        id: 'user_${DateTime.now().millisecondsSinceEpoch}',
-        name: name,
-        email: normalizedEmail,
-        role: role,
-        createdAt: DateTime.now(),
-        password: password,
-        updatedAt: DateTime.now(),
-        isApproved: isApproved,
-        approvedAt: isApproved ? DateTime.now() : null,
-        approvedBy: isApproved ? 'system' : null,
-        department: department,
-        employeeId: employeeId,
-        phoneNumber: phoneNumber,
-        lastLoginAt: DateTime.now(),
-        designation: designation,
-      );
+      // Create new user in Firebase Auth and Firestore
+      final isApproved = role != UserRole.teacher;
 
-      // Save user to Firestore
-      debugPrint('AuthService: Saving new user to Firestore: ${user.email}');
       try {
+        // 1. Create in Firebase Auth
+        await _auth.createUserWithEmailAndPassword(
+          email: normalizedEmail,
+          password: password,
+        );
+        debugPrint('AuthService: Firebase Auth account created');
+
+        // 2. Create local User model
+        final user = User(
+          id: _auth.currentUser?.uid ?? 'user_${DateTime.now().millisecondsSinceEpoch}',
+          name: name,
+          email: normalizedEmail,
+          role: role,
+          createdAt: DateTime.now(),
+          password: password,
+          updatedAt: DateTime.now(),
+          isApproved: isApproved,
+          approvedAt: isApproved ? DateTime.now() : null,
+          approvedBy: isApproved ? 'system' : null,
+          department: department,
+          employeeId: employeeId,
+          phoneNumber: phoneNumber,
+          lastLoginAt: DateTime.now(),
+          designation: designation,
+        );
+
+        // 3. Save to Firestore
         await FirestoreService.saveUser(user);
-        debugPrint('AuthService: Successfully saved new user to Firestore');
-      } catch (e) {
-        debugPrint('AuthService: Failed to save new user to Firestore: $e');
-        debugPrint(
-          'AuthService: Please check Firebase connection and configuration',
-        );
-        _setError(
-          'Signup failed: Unable to connect to database. Please check your connection and try again.',
-        );
+        debugPrint('AuthService: Firestore record created');
+
+        if (role == UserRole.teacher) {
+          debugPrint('AuthService: Teacher signup successful - pending approval');
+          await FirestoreService.logTeacherRegistered(user);
+          final notificationService = NotificationService();
+          await notificationService.notifyAdminsTeacherApprovalRequest(user);
+          
+          _setError('Teacher account created! Pending admin approval.');
+          _setLoading(false);
+          notifyListeners();
+          return true;
+        } else {
+          _currentUser = user;
+          await _persistCurrentUser();
+          _setLoading(false);
+          notifyListeners();
+          return true;
+        }
+      } on fb_auth.FirebaseAuthException catch (e) {
+        debugPrint('AuthService: Firebase Auth signup failed: ${e.code}');
+        _setError('Signup failed: ${e.message}');
         _setLoading(false);
         return false;
-      }
-
-      // Set current user for immediate login (except for teachers who need approval)
-      if (role == UserRole.teacher) {
-        // For teachers, don't set current user - they need admin approval
-        debugPrint(
-          'AuthService: Teacher signup successful for ${user.name} - pending admin approval',
-        );
-        
-        // Log activity for teacher registration
-        await FirestoreService.logTeacherRegistered(user);
-        
-        _setError(
-          'Account created successfully! Your teacher account is pending admin approval. Please contact an administrator.',
-        );
-        _setLoading(false);
-        notifyListeners();
-        return true;
-      } else {
-        // For students, set current user for immediate login
-        _currentUser = user;
-        debugPrint(
-          'AuthService: Signup successful for ${user.name} with role: ${user.role}',
-        );
-        await _persistCurrentUser();
-        _setLoading(false);
-        notifyListeners();
-        return true;
       }
     } catch (e) {
       debugPrint('Signup error: $e');
@@ -350,9 +302,68 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  Future<bool> sendPasswordResetEmail(String email) async {
+    _setLoading(true);
+    _setError(null);
+    final normalizedEmail = _normalizeEmail(email);
+
+    try {
+      // 1. Verify user exists in our Firestore database first
+      User? user = await FirestoreService.getUserByEmail(normalizedEmail);
+      if (user == null) {
+        _setError('No account found with this email address.');
+        _setLoading(false);
+        return false;
+      }
+
+      // 2. Try sending the reset email via Firebase Auth
+      try {
+        await _auth.sendPasswordResetEmail(email: normalizedEmail);
+        debugPrint('AuthService: Password reset email sent to $normalizedEmail');
+      } on fb_auth.FirebaseAuthException catch (e) {
+        if (e.code == 'user-not-found') {
+          // 3. User is in Firestore but not in Firebase Auth (Legacy user)
+          // We need to create a temporary Firebase Auth account so they can reset it
+          debugPrint('AuthService: Legacy user detected. Creating Firebase Auth placeholder.');
+          try {
+            // Create user with a random password because we don't store it in Auth yet
+            // This won't affect their Firestore data, but will enable the reset flow
+            final tempPassword = 'temp_${DateTime.now().millisecondsSinceEpoch}';
+            await _auth.createUserWithEmailAndPassword(
+              email: normalizedEmail,
+              password: tempPassword,
+            );
+            // Now that they exist in Auth, send the email
+            await _auth.sendPasswordResetEmail(email: normalizedEmail);
+            debugPrint('AuthService: Password reset email sent after creating placeholder');
+          } catch (createError) {
+            debugPrint('AuthService: Failed to create placeholder user: $createError');
+            _setError('Unable to send reset email. Please contact support.');
+            _setLoading(false);
+            return false;
+          }
+        } else {
+          debugPrint('AuthService: Firebase Auth error: ${e.code}');
+          _setError('Error sending email: ${e.message}');
+          _setLoading(false);
+          return false;
+        }
+      }
+      
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      debugPrint('AuthService: General error in sendPasswordResetEmail: $e');
+      _setError('Something went wrong. Please try again.');
+      _setLoading(false);
+      return false;
+    }
+  }
+
   Future<void> logout() async {
     _currentUser = null;
     _errorMessage = null;
+    NotificationService().clearNotifications();
     await _clearPersistedUser();
     notifyListeners();
   }

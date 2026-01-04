@@ -6,6 +6,9 @@ import '../mvc/controllers/project_service.dart';
 import '../mvc/controllers/auth_service.dart';
 import 'project_detail.dart';
 import 'semester_archive_new.dart';
+import '../mvc/views/profile_settings_screen.dart';
+import '../mvc/controllers/notification_service.dart';
+import '../mvc/views/notifications_screen.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   const TeacherDashboardScreen({super.key});
@@ -17,6 +20,7 @@ class TeacherDashboardScreen extends StatefulWidget {
 class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   final ProjectService _projectService = ProjectService();
   final AuthService _authService = AuthService();
+  final NotificationService _notificationService = NotificationService();
   int _selectedIndex = 0;
 
   @override
@@ -25,6 +29,14 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     _projectService.reloadProjects();
     _authService.addListener(_onAuthChanged);
     _onAuthChanged();
+    _loadNotifications();
+  }
+
+  void _loadNotifications() {
+    final user = _authService.currentUser;
+    if (user != null) {
+      _notificationService.startListening(user.id);
+    }
   }
 
   @override
@@ -49,9 +61,30 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
         foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
         actions: [
+          AnimatedBuilder(
+            animation: _notificationService,
+            builder: (context, _) {
+              return Badge(
+                label: Text('${_notificationService.unreadCount}'),
+                isLabelVisible: _notificationService.unreadCount > 0,
+                child: IconButton(
+                  icon: const Icon(Icons.notifications),
+                  onPressed: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                    );
+                  },
+                ),
+              );
+            },
+          ),
           PopupMenuButton<String>(
             onSelected: (String value) async {
-              if (value == 'logout') {
+              if (value == 'profile') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
+                );
+              } else if (value == 'logout') {
                 await _authService.logout();
                 if (mounted) {
                   Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
