@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -21,20 +22,24 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Install dependencies
+      - name: Enable web support
+        run: flutter config --enable-web
+
+      - name: Get dependencies
         run: flutter pub get
 
-      - name: Analyze project
-        run: flutter analyze --no-fatal-infos
-        continue-on-error: true
-
-      - name: Build Web
-        run: flutter build web --release --base-href "/-baust-project-showcase/" --web-renderer canvaskit --no-tree-shake-icons
+      - name: Build for web
+        run: |
+          flutter build web \
+            --release \
+            --base-href="/-baust-project-showcase/" \
+            --web-renderer=canvaskit \
+            --verbose
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
         with:
           branch: gh-pages
           folder: build/web
-
+          clean: true
 
