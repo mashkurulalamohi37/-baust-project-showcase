@@ -10,6 +10,8 @@ import '../mvc/controllers/firestore_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
+import 'dart:html' as html show IFrameElement;
+import 'dart:ui_web' as ui_web;
 
 class ProjectDetailScreen extends StatefulWidget {
   const ProjectDetailScreen({
@@ -421,15 +423,26 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
               if (currentProject.youtubeUrl != null && currentProject.youtubeUrl!.isNotEmpty) ...[
                 Text('Project Demo Video', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
-                if (player != null)
-                  kIsWeb 
-                      ? AspectRatio(aspectRatio: 16/9, child: player)
-                      : ClipRRect(
-                          borderRadius: BorderRadius.circular(12),
-                          child: player,
-                        )
+                if (kIsWeb)
+                  // Use native HTML iframe for web/PWA
+                  Builder(
+                    builder: (context) {
+                      final videoId = YoutubePlayer.convertUrlToId(currentProject.youtubeUrl!);
+                      if (videoId != null) {
+                        return _buildWebYoutubePlayer(videoId);
+                      }
+                      return _buildInvalidYoutubeCard();
+                    },
+                  )
                 else
-                  _buildInvalidYoutubeCard(),
+                  // Use youtube_player_flutter for mobile
+                  if (player != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(12),
+                      child: player,
+                    )
+                  else
+                    _buildInvalidYoutubeCard(),
                 const SizedBox(height: 16),
               ],
 
@@ -1745,6 +1758,33 @@ class _RevisionUploadDialogState extends State<_RevisionUploadDialog> {
     }
   }
 }
+
+
+  Widget _buildWebYoutubePlayer(String videoId) {
+    // Register iframe view
+    final String viewId = 'youtube-player-$videoId';
+    
+    // Register the iframe element
+    // ignore: undefined_prefixed_name
+    ui_web.platformViewRegistry.registerViewFactory(
+      viewId,
+      (int viewId) {
+        final iframe = html.IFrameElement()
+          ..src = 'https://www.youtube.com/embed/$videoId?enablejsapi=1&origin=${Uri.base.origin}'
+          ..style.border = 'none'
+          ..style.width = '100%'
+          ..style.height = '100%'
+          ..allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
+          ..allowFullscreen = true;
+        return iframe;
+      },
+    );
+
+    return AspectRatio(
+      aspectRatio: 16 / 9,
+      child: HtmlElementView(viewType: viewId),
+    );
+  }
 
 class CustomYoutubePlayerBuilder extends StatefulWidget {
   final Widget player;
