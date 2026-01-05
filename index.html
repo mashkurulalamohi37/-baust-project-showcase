@@ -6,7 +6,7 @@
 
   <meta charset="UTF-8">
   <meta name="viewport"
-    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    content="width=device-width, height=device-height, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
 
   <!-- Primary Meta Tags -->
@@ -228,6 +228,7 @@
       height: 100%;
       margin: 0;
       padding: 0;
+      background-color: #1a1a2e;
     }
 
     #app-container {
@@ -335,7 +336,7 @@
     // Service Worker Registration
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('flutter_service_worker.js?v=3979768238')
+        navigator.serviceWorker.register('flutter_service_worker.js?v=901004483')
           .then(registration => {
             console.log('Service Worker registered successfully:', registration.scope);
           })
