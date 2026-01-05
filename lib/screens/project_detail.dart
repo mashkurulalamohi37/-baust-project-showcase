@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../mvc/models/project.dart';
 import '../mvc/models/user.dart';
 import '../mvc/models/review.dart';
@@ -162,8 +163,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 backgroundColor: Colors.black12,
               ),
             ),
-            // Seek Gesture Detectors
-            Positioned.fill(
+            // Seek Gesture Detectors - Disabled on Web to prevent blocking iframe interaction
+            if (!kIsWeb)
+              Positioned.fill(
               child: Row(
                 children: [
                   Expanded(
