@@ -14,3 +14,7 @@
 
 ## Prevent obfuscating generic Flutter classes
 -keep class com.example.projectshowcase.** { *; }
+
+## Ignore Play Core missing classes (safe for non-deferred apps)
+-dontwarn com.google.android.play.core.**
+-dontwarn io.flutter.embedding.engine.deferredcomponents.**
