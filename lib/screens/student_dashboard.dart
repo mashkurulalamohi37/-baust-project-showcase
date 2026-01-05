@@ -1547,35 +1547,7 @@ class _UploadTabState extends State<_UploadTab> {
                         fontWeight: FontWeight.w600,
                       ),
                     ),
-                    if (_selectedProjectType == ProjectType.thesis) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: Theme.of(context).colorScheme.primaryContainer,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.info_outline,
-                              size: 20,
-                              color: Theme.of(context).colorScheme.onPrimaryContainer,
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                'Thesis submission requires a PDF document.',
-                                style: TextStyle(
-                                  color: Theme.of(context).colorScheme.onPrimaryContainer,
-                                  fontSize: 12,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
+
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -1587,7 +1559,7 @@ class _UploadTabState extends State<_UploadTab> {
                               color: _selectedPdfPath == null ? null : Colors.green,
                             ),
                             label: Text(_selectedPdfPath == null 
-                                ? (_selectedProjectType == ProjectType.thesis ? 'Attach Thesis PDF (Required)' : 'Attach PDF')
+                                ? 'Attach PDF'
                                 : 'PDF Selected'),
                           ),
                         ),
@@ -1642,16 +1614,7 @@ class _UploadTabState extends State<_UploadTab> {
               width: double.infinity,
               child: FilledButton(
                 onPressed: _isSubmitting ? null : () {
-                  // Validate PDF is required for thesis
-                  if (_selectedProjectType == ProjectType.thesis && _selectedPdfPath == null) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Please attach a PDF document for thesis submission'),
-                        backgroundColor: Colors.orange,
-                      ),
-                    );
-                    return;
-                  }
+
                   _submitProject();
                 },
                 style: FilledButton.styleFrom(
