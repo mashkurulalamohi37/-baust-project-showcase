@@ -33,10 +33,21 @@ class NotificationService extends ChangeNotifier {
 
   // Initialize local notifications
   Future<void> initialize() async {
-    if (_isInitialized) return;
+    if (_isInitialized) {
+      debugPrint('NotificationService: Already initialized');
+      return;
+    }
+
+    debugPrint('NotificationService: Starting initialization...');
 
     // Request permissions for Android 13+
-    await Permission.notification.request();
+    final permissionStatus = await Permission.notification.request();
+    debugPrint('NotificationService: Permission status: $permissionStatus');
+    
+    if (permissionStatus.isDenied || permissionStatus.isPermanentlyDenied) {
+      debugPrint('NotificationService: WARNING - Notification permission denied!');
+      debugPrint('NotificationService: User needs to enable notifications in device settings');
+    }
 
     const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
@@ -45,48 +56,69 @@ class NotificationService extends ChangeNotifier {
       android: initializationSettingsAndroid,
     );
 
-    await _localNotifications.initialize(
+    final initialized = await _localNotifications.initialize(
       initializationSettings,
       onDidReceiveNotificationResponse: (NotificationResponse response) {
-        // Handle notification tap if needed
         debugPrint('Notification tapped: ${response.payload}');
       },
     );
 
+    debugPrint('NotificationService: Plugin initialization result: $initialized');
+
     _isInitialized = true;
-    debugPrint('NotificationService: Local notifications initialized');
+    debugPrint('NotificationService: Local notifications initialized successfully');
+  }
+
+  // Check if notifications are enabled
+  Future<bool> areNotificationsEnabled() async {
+    final status = await Permission.notification.status;
+    return status.isGranted;
   }
 
   // Show a system notification
   Future<void> showLocalNotification(Notification notification) async {
-    // Respect user's notification settings from profile
-    final currentUser = AuthService().currentUser;
-    if (currentUser == null || !currentUser.notificationsEnabled) {
-      debugPrint('NotificationService: Skipping local notification - Disabled by user');
-      return;
+    try {
+      debugPrint('NotificationService: Attempting to show local notification: ${notification.title}');
+      
+      // Respect user's notification settings from profile
+      final currentUser = AuthService().currentUser;
+      if (currentUser == null || !currentUser.notificationsEnabled) {
+        debugPrint('NotificationService: Skipping local notification - Disabled by user');
+        return;
+      }
+
+      debugPrint('NotificationService: User has notifications enabled, proceeding...');
+      debugPrint('NotificationService: Initialized status: $_isInitialized');
+
+      const AndroidNotificationDetails androidPlatformChannelSpecifics =
+          AndroidNotificationDetails(
+        'project_showcase_channel',
+        'Project Showcase Notifications',
+        channelDescription: 'Notifications for project approvals, reviews and updates',
+        importance: Importance.max,
+        priority: Priority.high,
+        showWhen: true,
+        playSound: true,
+        enableVibration: true,
+      );
+      
+      const NotificationDetails platformChannelSpecifics = NotificationDetails(
+        android: androidPlatformChannelSpecifics,
+      );
+
+      debugPrint('NotificationService: Calling _localNotifications.show()...');
+      await _localNotifications.show(
+        notification.id.hashCode,
+        notification.title,
+        notification.message,
+        platformChannelSpecifics,
+        payload: notification.projectId,
+      );
+      debugPrint('NotificationService: Local notification shown successfully!');
+    } catch (e, stackTrace) {
+      debugPrint('NotificationService: ERROR showing local notification: $e');
+      debugPrint('NotificationService: Stack trace: $stackTrace');
     }
-
-    const AndroidNotificationDetails androidPlatformChannelSpecifics =
-        AndroidNotificationDetails(
-      'project_showcase_channel',
-      'Project Showcase Notifications',
-      channelDescription: 'Notifications for project approvals, reviews and updates',
-      importance: Importance.max,
-      priority: Priority.high,
-      showWhen: true,
-    );
-    
-    const NotificationDetails platformChannelSpecifics = NotificationDetails(
-      android: androidPlatformChannelSpecifics,
-    );
-
-    await _localNotifications.show(
-      notification.id.hashCode,
-      notification.title,
-      notification.message,
-      platformChannelSpecifics,
-      payload: notification.projectId,
-    );
   }
 
   // Start listening to real-time notifications

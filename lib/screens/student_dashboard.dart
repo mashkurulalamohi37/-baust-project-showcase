@@ -12,6 +12,7 @@ import 'semester_archive_new.dart';
 import '../mvc/views/profile_settings_screen.dart';
 import '../mvc/controllers/notification_service.dart';
 import '../mvc/views/notifications_screen.dart';
+import 'notification_test_screen.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
   const StudentDashboardScreen({super.key});
@@ -76,6 +77,10 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                 Navigator.of(context).push(
                   MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
                 );
+              } else if (value == 'test_notifications') {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (context) => const NotificationTestScreen()),
+                );
               } else if (value == 'logout') {
                 await _authService.logout();
                 if (mounted) {
@@ -91,6 +96,17 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
                     const Icon(Icons.person),
                     const SizedBox(width: 8),
                     Text(_authService.currentUser?.name ?? 'Student'),
+                  ],
+                ),
+              ),
+              const PopupMenuDivider(),
+              const PopupMenuItem<String>(
+                value: 'test_notifications',
+                child: Row(
+                  children: [
+                    Icon(Icons.bug_report),
+                    SizedBox(width: 8),
+                    Text('Test Notifications'),
                   ],
                 ),
               ),
