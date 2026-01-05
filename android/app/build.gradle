@@ -56,9 +56,38 @@ android {
         multiDexEnabled true
     }
 
+    signingConfigs {
+        debug {
+            storeFile file('debug.keystore')
+        }
+        release {
+             // You need to generate a key.properties file to sign your app for the Play Store.
+             // See PLAY_STORE_GUIDE.md for instructions.
+             if (rootProject.file('key.properties').exists()) {
+                 def keystoreProperties = new Properties()
+                 rootProject.file('key.properties').withReader('UTF-8') { reader ->
+                     keystoreProperties.load(reader)
+                 }
+                 keyAlias = keystoreProperties['keyAlias']
+                 keyPassword = keystoreProperties['keyPassword']
+                 storeFile = file(keystoreProperties['storeFile'])
+                 storePassword = keystoreProperties['storePassword']
+             } else {
+                 // Fallback for local testing only. NOT FOR PLAY STORE.
+                 storeFile file('debug.keystore')
+                 storePassword 'android'
+                 keyAlias 'androiddebugkey'
+                 keyPassword 'android'
+             }
+        }
+    }
+
     buildTypes {
         release {
-            signingConfig signingConfigs.debug
+            signingConfig signingConfigs.release
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }
