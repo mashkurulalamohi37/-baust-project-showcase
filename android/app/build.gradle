@@ -58,7 +58,12 @@ android {
 
     signingConfigs {
         debug {
-            storeFile file('debug.keystore')
+            def debugKeystore = file('debug.keystore')
+            if (debugKeystore.exists()) {
+                storeFile debugKeystore
+            } else {
+                storeFile file("${System.properties['user.home']}/.android/debug.keystore")
+            }
         }
         release {
              // You need to generate a key.properties file to sign your app for the Play Store.
