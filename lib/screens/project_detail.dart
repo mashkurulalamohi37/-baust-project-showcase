@@ -150,7 +150,10 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           children: [
             YoutubePlayer(
               controller: _youtubeController!,
-              showVideoProgressIndicator: true,
+              showVideoProgressIndicator: false, // Disabled to prevent blocking on web
+              onReady: () {
+                debugPrint('YouTube Player Ready');
+              },
               progressIndicatorColor: Colors.red,
               progressColors: const ProgressBarColors(
                 playedColor: Colors.red,
