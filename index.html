@@ -339,7 +339,7 @@
     // Service Worker Registration
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('flutter_service_worker.js?v=2310435950')
+        navigator.serviceWorker.register('flutter_service_worker.js?v=3826842715')
           .then(registration => {
             console.log('Service Worker registered successfully:', registration.scope);
           })
@@ -394,6 +394,30 @@
       document.documentElement.style.setProperty('--safe-area-inset-top', 'env(safe-area-inset-top)');
       document.documentElement.style.setProperty('--safe-area-inset-bottom', 'env(safe-area-inset-bottom)');
     }
+
+    // Fix keyboard resize issues on mobile web
+    let lastHeight = window.innerHeight;
+    window.visualViewport.addEventListener('resize', () => {
+      const currentHeight = window.visualViewport.height;
+
+      // If viewport height increased (keyboard likely closed)
+      if (currentHeight > lastHeight) {
+        // Force scroll to top and reset layout
+        window.scrollTo(0, 0);
+        document.body.scrollTop = 0;
+
+        // Force layout recalculation
+        const appContainer = document.getElementById('app-container');
+        if (appContainer) {
+          appContainer.style.height = window.innerHeight + 'px';
+          setTimeout(() => {
+            appContainer.style.height = '100%';
+          }, 100);
+        }
+      }
+
+      lastHeight = currentHeight;
+    });
   </script>
 </body>
 
