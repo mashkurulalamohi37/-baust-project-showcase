@@ -422,10 +422,12 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 Text('Project Demo Video', style: Theme.of(context).textTheme.titleMedium),
                 const SizedBox(height: 8),
                 if (player != null)
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(12),
-                    child: player,
-                  )
+                  kIsWeb 
+                      ? AspectRatio(aspectRatio: 16/9, child: player)
+                      : ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: player,
+                        )
                 else
                   _buildInvalidYoutubeCard(),
                 const SizedBox(height: 16),
