@@ -19,7 +19,7 @@ jobs:
         uses: subosito/flutter-action@v2
         with:
           channel: 'stable'
-          flutter-version: '3.24.3' # Using a specific version for stability
+          cache: true
 
       - name: Install dependencies
         run: flutter pub get
@@ -32,3 +32,4 @@ jobs:
         with:
           branch: gh-pages
           folder: build/web
+
