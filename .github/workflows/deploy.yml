@@ -29,12 +29,7 @@ jobs:
         run: flutter pub get
 
       - name: Build for web
-        run: |
-          flutter build web \
-            --release \
-            --base-href="/-baust-project-showcase/" \
-            --web-renderer=canvaskit \
-            --verbose
+        run: flutter build web --release --base-href="/-baust-project-showcase/" --web-renderer=canvaskit --verbose
 
       - name: Deploy to GitHub Pages
         uses: JamesIves/github-pages-deploy-action@v4
