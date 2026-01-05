@@ -42,122 +42,126 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Student Dashboard'),
-        backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-        foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
-        actions: [
-          IconButton(
-            onPressed: () => Navigator.pushNamed(context, '/search'),
-            icon: const Icon(Icons.search),
-            tooltip: 'Search Projects',
-          ),
-          AnimatedBuilder(
-            animation: _notificationService,
-            builder: (context, _) {
-              return Badge(
-                label: Text('${_notificationService.unreadCount}'),
-                isLabelVisible: _notificationService.unreadCount > 0,
-                child: IconButton(
-                  icon: const Icon(Icons.notifications),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                    );
-                  },
-                ),
-              );
-            },
-          ),
-          PopupMenuButton<String>(
-            onSelected: (String value) async {
-              if (value == 'profile') {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
+    return SafeArea(
+      top: true,
+      bottom: false,
+      child: Scaffold(
+        appBar: AppBar(
+          title: const Text('Student Dashboard'),
+          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
+          foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+          actions: [
+            IconButton(
+              onPressed: () => Navigator.pushNamed(context, '/search'),
+              icon: const Icon(Icons.search),
+              tooltip: 'Search Projects',
+            ),
+            AnimatedBuilder(
+              animation: _notificationService,
+              builder: (context, _) {
+                return Badge(
+                  label: Text('${_notificationService.unreadCount}'),
+                  isLabelVisible: _notificationService.unreadCount > 0,
+                  child: IconButton(
+                    icon: const Icon(Icons.notifications),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                      );
+                    },
+                  ),
                 );
-              } else if (value == 'logout') {
-                await _authService.logout();
-                if (mounted) {
-                  Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+              },
+            ),
+            PopupMenuButton<String>(
+              onSelected: (String value) async {
+                if (value == 'profile') {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
+                  );
+                } else if (value == 'logout') {
+                  await _authService.logout();
+                  if (mounted) {
+                    Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+                  }
                 }
-              }
-            },
-            itemBuilder: (BuildContext context) => [
-              PopupMenuItem<String>(
-                value: 'profile',
-                child: Row(
-                  children: [
-                    const Icon(Icons.person),
-                    const SizedBox(width: 8),
-                    Text(_authService.currentUser?.name ?? 'Student'),
-                  ],
+              },
+              itemBuilder: (BuildContext context) => [
+                PopupMenuItem<String>(
+                  value: 'profile',
+                  child: Row(
+                    children: [
+                      const Icon(Icons.person),
+                      const SizedBox(width: 8),
+                      Text(_authService.currentUser?.name ?? 'Student'),
+                    ],
+                  ),
                 ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem<String>(
-                value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout),
-                    SizedBox(width: 8),
-                    Text('Logout'),
-                  ],
+                const PopupMenuDivider(),
+                const PopupMenuItem<String>(
+                  value: 'logout',
+                  child: Row(
+                    children: [
+                      Icon(Icons.logout),
+                      SizedBox(width: 8),
+                      Text('Logout'),
+                    ],
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
-      ),
-      body: AnimatedBuilder(
-        animation: _projectService,
-        builder: (context, child) {
-          if (_projectService.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
+              ],
+            ),
+          ],
+        ),
+        body: AnimatedBuilder(
+          animation: _projectService,
+          builder: (context, child) {
+            if (_projectService.isLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
 
-          return IndexedStack(
-            index: _selectedIndex,
-            children: [
-              _ExploreTab(projectService: _projectService, authService: _authService),
-              _UploadTab(projectService: _projectService, authService: _authService),
-              _MyProjectsTab(projectService: _projectService, authService: _authService),
-              _BookmarksTab(projectService: _projectService, authService: _authService),
-              const SemesterArchiveScreen(),
-            ],
-          );
-        },
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.explore_outlined),
-            selectedIcon: Icon(Icons.explore),
-            label: 'Explore',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.upload_outlined),
-            selectedIcon: Icon(Icons.upload),
-            label: 'Upload',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.folder_outlined),
-            selectedIcon: Icon(Icons.folder),
-            label: 'My Projects',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.bookmark_border),
-            selectedIcon: Icon(Icons.bookmark),
-            label: 'Bookmarks',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.archive_outlined),
-            selectedIcon: Icon(Icons.archive),
-            label: 'Archives',
-          ),
-        ],
+            return IndexedStack(
+              index: _selectedIndex,
+              children: [
+                _ExploreTab(projectService: _projectService, authService: _authService),
+                _UploadTab(projectService: _projectService, authService: _authService),
+                _MyProjectsTab(projectService: _projectService, authService: _authService),
+                _BookmarksTab(projectService: _projectService, authService: _authService),
+                const SemesterArchiveScreen(),
+              ],
+            );
+          },
+        ),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
+          destinations: const [
+            NavigationDestination(
+              icon: Icon(Icons.explore_outlined),
+              selectedIcon: Icon(Icons.explore),
+              label: 'Explore',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.upload_outlined),
+              selectedIcon: Icon(Icons.upload),
+              label: 'Upload',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.folder_outlined),
+              selectedIcon: Icon(Icons.folder),
+              label: 'My Projects',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.bookmark_border),
+              selectedIcon: Icon(Icons.bookmark),
+              label: 'Bookmarks',
+            ),
+            NavigationDestination(
+              icon: Icon(Icons.archive_outlined),
+              selectedIcon: Icon(Icons.archive),
+              label: 'Archives',
+            ),
+          ],
+        ),
       ),
     );
   }
