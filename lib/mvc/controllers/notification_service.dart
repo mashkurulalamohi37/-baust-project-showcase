@@ -165,6 +165,7 @@ class NotificationService extends ChangeNotifier {
           _notifications.addAll(newNotifications);
           notifyListeners();
           debugPrint('NotificationService: Current unread count: $unreadCount');
+          debugPrint('NotificationService: Total notifications: ${_notifications.length}');
         }, onError: (error) {
           debugPrint('NotificationService: Stream error: $error');
         });
@@ -268,17 +269,24 @@ class NotificationService extends ChangeNotifier {
   // Mark notification as read
   Future<bool> markAsRead(String notificationId) async {
     try {
+      debugPrint('NotificationService: Marking notification $notificationId as read');
+      
       await FirestoreService.markNotificationAsRead(notificationId);
+      
+      debugPrint('NotificationService: Firestore updated successfully for $notificationId');
       
       final index = _notifications.indexWhere((n) => n.id == notificationId);
       if (index != -1) {
         _notifications[index] = _notifications[index].copyWith(isRead: true);
         notifyListeners();
+        debugPrint('NotificationService: Local notification list updated. Unread count: $unreadCount');
+      } else {
+        debugPrint('NotificationService: WARNING - Notification $notificationId not found in local list');
       }
       
       return true;
     } catch (e) {
-      debugPrint('Error marking notification as read: $e');
+      debugPrint('NotificationService: ERROR marking notification as read: $e');
       return false;
     }
   }
