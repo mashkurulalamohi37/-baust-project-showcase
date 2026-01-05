@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 import '../models/user.dart';
 import '../controllers/auth_service.dart';
 import '../controllers/firestore_service.dart';
@@ -291,6 +293,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
                     _buildNotificationTypesGrid(user.role, colorScheme),
                     const SizedBox(height: 24),
                   ],
+                  _buildSectionTitle('SHARE APP'),
+                  const SizedBox(height: 12),
+                  _buildShareAppCard(colorScheme),
+                  const SizedBox(height: 24),
                   _buildSectionTitle('ACCOUNT INFORMATION'),
                   const SizedBox(height: 12),
                   _buildAccountInfoCard(user, colorScheme),
@@ -668,6 +674,161 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   String _formatDate(DateTime date) {
     final months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return '${months[date.month - 1]} ${date.day}, ${date.year}';
+  }
+
+  Widget _buildShareAppCard(ColorScheme colorScheme) {
+    const String appUrl = 'https://mashkurulalamohi37.github.io/-baust-project-showcase/';
+    
+    return Card(
+      elevation: 0,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.grey.withOpacity(0.1)),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          children: [
+            // QR Code
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.grey.withOpacity(0.2)),
+              ),
+              child: QrImageView(
+                data: appUrl,
+                version: QrVersions.auto,
+                size: 200.0,
+                backgroundColor: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Title
+            Row(
+              children: [
+                Icon(Icons.ios_share, color: colorScheme.primary, size: 24),
+                const SizedBox(width: 12),
+                const Expanded(
+                  child: Text(
+                    'Install on iOS',
+                    style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            
+            // Instructions
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withOpacity(0.05),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                  color: colorScheme.primary.withOpacity(0.1),
+                ),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildInstructionStep(
+                    '1',
+                    'Scan the QR code or open the link in Safari',
+                    colorScheme,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildInstructionStep(
+                    '2',
+                    'Tap the Share button (□↑) at the bottom',
+                    colorScheme,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildInstructionStep(
+                    '3',
+                    'Select "Add to Home Screen"',
+                    colorScheme,
+                  ),
+                  const SizedBox(height: 12),
+                  _buildInstructionStep(
+                    '4',
+                    'Tap "Add" to install the app',
+                    colorScheme,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Copy Link Button
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: () {
+                  Clipboard.setData(const ClipboardData(text: appUrl));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Link copied to clipboard!'),
+                      duration: Duration(seconds: 2),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.copy),
+                label: const Text('Copy Link'),
+                style: OutlinedButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildInstructionStep(String number, String text, ColorScheme colorScheme) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 24,
+          height: 24,
+          decoration: BoxDecoration(
+            color: colorScheme.primary,
+            shape: BoxShape.circle,
+          ),
+          child: Center(
+            child: Text(
+              number,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            text,
+            style: const TextStyle(
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
+    );
   }
 }
 
