@@ -79,9 +79,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-storage-compat.js"></script>
 
-  <!-- Initialize Firebase -->
-  <script src="firebase-init.js"></script>
-
   <style>
     /* Loading screen */
     #loading {
@@ -354,7 +351,7 @@
     // Service Worker Registration
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('flutter_service_worker.js?v=3762551621')
+        navigator.serviceWorker.register('flutter_service_worker.js?v=174903628')
           .then(registration => {
             console.log('Service Worker registered successfully:', registration.scope);
           })
