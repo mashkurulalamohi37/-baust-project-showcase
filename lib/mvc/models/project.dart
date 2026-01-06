@@ -42,7 +42,11 @@ class Project {
   final int? level; // For individual projects
   final int? term; // For individual projects
   final Semester semester; // Summer or Winter
+  final ProjectSubmissionType submissionType;
+  final AcademicCourse? academicCourse;
+  final String? assistantTeacherId;
   final ProjectAward award;
+  final String? rejectionReason; // Reason for rejection if status is rejected
 
   const Project({
     required this.id,
@@ -81,6 +85,10 @@ class Project {
     this.level,
     this.term,
     this.award = ProjectAward.none,
+    this.submissionType = ProjectSubmissionType.projectShowcase,
+    this.academicCourse,
+    this.assistantTeacherId,
+    this.rejectionReason,
   });
 
   Project copyWith({
@@ -120,6 +128,10 @@ class Project {
     int? level,
     int? term,
     ProjectAward? award,
+    ProjectSubmissionType? submissionType,
+    AcademicCourse? academicCourse,
+    String? assistantTeacherId,
+    String? rejectionReason,
   }) {
     return Project(
       id: id ?? this.id,
@@ -158,6 +170,10 @@ class Project {
       level: level ?? this.level,
       term: term ?? this.term,
       award: award ?? this.award,
+      submissionType: submissionType ?? this.submissionType,
+      academicCourse: academicCourse ?? this.academicCourse,
+      assistantTeacherId: assistantTeacherId ?? this.assistantTeacherId,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
     );
   }
 
@@ -199,6 +215,10 @@ class Project {
       'level': level,
       'term': term,
       'award': award.name,
+      'submissionType': submissionType.name,
+      'academicCourse': academicCourse?.name,
+      'assistantTeacherId': assistantTeacherId,
+      'rejectionReason': rejectionReason,
     };
   }
 }
@@ -245,6 +265,53 @@ enum ProjectAward {
   firstRunnerUp,
   secondRunnerUp,
   thirdRunnerUp,
+}
+
+enum ProjectSubmissionType {
+  projectShowcase,
+  academic,
+}
+
+enum AcademicCourse {
+  softwareDevelopmentProject1,
+  softwareDevelopmentProject2,
+  softwareEngineeringSessional,
+  databaseManagementSystemsSessional,
+  webEngineeringSessional,
+  machineLearningSessional,
+  artificialIntelligenceSessional,
+}
+
+extension ProjectSubmissionTypeExtension on ProjectSubmissionType {
+  String get displayName {
+    switch (this) {
+      case ProjectSubmissionType.projectShowcase:
+        return 'Project Showcase';
+      case ProjectSubmissionType.academic:
+        return 'Academic';
+    }
+  }
+}
+
+extension AcademicCourseExtension on AcademicCourse {
+  String get displayName {
+    switch (this) {
+      case AcademicCourse.softwareDevelopmentProject1:
+        return 'Software Development Project-I';
+      case AcademicCourse.softwareDevelopmentProject2:
+        return 'Software Development Project-II';
+      case AcademicCourse.softwareEngineeringSessional:
+        return 'Software Engineering Sessional';
+      case AcademicCourse.databaseManagementSystemsSessional:
+        return 'Database Management Systems Sessional';
+      case AcademicCourse.webEngineeringSessional:
+        return 'Web Engineering Sessional';
+      case AcademicCourse.machineLearningSessional:
+        return 'Machine Learning Sessional';
+      case AcademicCourse.artificialIntelligenceSessional:
+        return 'Artificial Intelligence Sessional';
+    }
+  }
 }
 
 extension ProjectTypeExtension on ProjectType {

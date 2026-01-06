@@ -562,6 +562,10 @@ class FirestoreService {
         'level': project.level,
         'term': project.term,
         'award': project.award.name,
+        'submissionType': project.submissionType.name,
+        'academicCourse': project.academicCourse?.name,
+        'assistantTeacherId': project.assistantTeacherId,
+        'rejectionReason': project.rejectionReason,
       });
       print('Project saved successfully: ${project.title} (facultyId: ${project.facultyId}, facultyName: ${project.facultyName})');
     } catch (e) {
@@ -638,6 +642,20 @@ class FirestoreService {
                   orElse: () => ProjectAward.none,
                 )
               : ProjectAward.none,
+          submissionType: data['submissionType'] != null
+              ? ProjectSubmissionType.values.firstWhere(
+                  (e) => e.name == data['submissionType'],
+                  orElse: () => ProjectSubmissionType.projectShowcase,
+                )
+              : ProjectSubmissionType.projectShowcase,
+          academicCourse: data['academicCourse'] != null
+              ? AcademicCourse.values.firstWhere(
+                  (e) => e.name == data['academicCourse'],
+                  orElse: () => AcademicCourse.softwareDevelopmentProject1,
+                )
+              : null,
+          assistantTeacherId: data['assistantTeacherId'],
+          rejectionReason: data['rejectionReason'],
         );
       }).toList();
     } catch (e) {
@@ -753,6 +771,20 @@ class FirestoreService {
                   orElse: () => ProjectAward.none,
                 )
               : ProjectAward.none,
+          submissionType: data['submissionType'] != null
+              ? ProjectSubmissionType.values.firstWhere(
+                  (e) => e.name == data['submissionType'],
+                  orElse: () => ProjectSubmissionType.projectShowcase,
+                )
+              : ProjectSubmissionType.projectShowcase,
+          academicCourse: data['academicCourse'] != null
+              ? AcademicCourse.values.firstWhere(
+                  (e) => e.name == data['academicCourse'],
+                  orElse: () => AcademicCourse.softwareDevelopmentProject1,
+                )
+              : null,
+          assistantTeacherId: data['assistantTeacherId'],
+          rejectionReason: data['rejectionReason'],
         );
       }).toList();
     } catch (e) {
@@ -835,6 +867,20 @@ class FirestoreService {
                 orElse: () => ProjectAward.none,
               )
             : ProjectAward.none,
+        submissionType: data['submissionType'] != null
+            ? ProjectSubmissionType.values.firstWhere(
+                (e) => e.name == data['submissionType'],
+                orElse: () => ProjectSubmissionType.projectShowcase,
+              )
+            : ProjectSubmissionType.projectShowcase,
+        academicCourse: data['academicCourse'] != null
+            ? AcademicCourse.values.firstWhere(
+                (e) => e.name == data['academicCourse'],
+                orElse: () => AcademicCourse.softwareDevelopmentProject1,
+              )
+            : null,
+        assistantTeacherId: data['assistantTeacherId'],
+        rejectionReason: data['rejectionReason'],
       );
     } catch (e) {
       print('ERROR: Failed to get project by id: $e');
@@ -870,6 +916,10 @@ class FirestoreService {
         'isFeatured': project.isFeatured,
         'facultyId': project.facultyId,
         'facultyName': project.facultyName,
+        'submissionType': project.submissionType.name,
+        'academicCourse': project.academicCourse?.name,
+        'assistantTeacherId': project.assistantTeacherId,
+        'facultyName': project.facultyName,
         'version': project.version,
         'updatedAt': project.updatedAt.toIso8601String(),
         'feedback': project.feedback.map((f) => f.toMap()).toList(),
@@ -883,6 +933,7 @@ class FirestoreService {
         'level': project.level,
         'term': project.term,
         'award': project.award.name,
+        'rejectionReason': project.rejectionReason,
       });
       print('Project updated successfully: ${project.title} (version: ${project.version}, isFeatured: ${project.isFeatured}, facultyId: ${project.facultyId})');
     } catch (e) {

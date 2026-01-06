@@ -20,6 +20,10 @@ class Project {
   final String? facultyName;
   final int version;
   final String? parentProjectId;
+  final ProjectSubmissionType submissionType;
+  final AcademicCourse? academicCourse;
+  final String? assistantTeacherId;
+  final String? rejectionReason;
   final List<ProjectFeedback> feedback;
   final List<ProjectVersion> versions;
 
@@ -45,6 +49,10 @@ class Project {
     this.facultyName,
     this.version = 1,
     this.parentProjectId,
+    this.submissionType = ProjectSubmissionType.projectShowcase,
+    this.academicCourse,
+    this.assistantTeacherId,
+    this.rejectionReason,
     this.feedback = const [],
     this.versions = const [],
   });
@@ -71,6 +79,7 @@ class Project {
     String? facultyName,
     int? version,
     String? parentProjectId,
+    String? rejectionReason,
     List<ProjectFeedback>? feedback,
     List<ProjectVersion>? versions,
   }) {
@@ -96,6 +105,7 @@ class Project {
       facultyName: facultyName ?? this.facultyName,
       version: version ?? this.version,
       parentProjectId: parentProjectId ?? this.parentProjectId,
+      rejectionReason: rejectionReason ?? this.rejectionReason,
       feedback: feedback ?? this.feedback,
       versions: versions ?? this.versions,
     );
@@ -124,6 +134,7 @@ class Project {
       'facultyName': facultyName,
       'version': version,
       'parentProjectId': parentProjectId,
+      'rejectionReason': rejectionReason,
       'feedback': feedback.map((f) => f.toMap()).toList(),
       'versions': versions.map((v) => v.toMap()).toList(),
     };
@@ -356,6 +367,53 @@ extension FeedbackTypeExtension on FeedbackType {
         return '⚠️';
       case FeedbackType.approval:
         return '✅';
+    }
+  }
+}
+
+enum ProjectSubmissionType {
+  projectShowcase,
+  academic,
+}
+
+extension ProjectSubmissionTypeExtension on ProjectSubmissionType {
+  String get displayName {
+    switch (this) {
+      case ProjectSubmissionType.projectShowcase:
+        return 'Project Showcase';
+      case ProjectSubmissionType.academic:
+        return 'Academic';
+    }
+  }
+}
+
+enum AcademicCourse {
+  softwareDevelopmentProject1,
+  softwareDevelopmentProject2,
+  softwareEngineeringSessional,
+  databaseManagementSystemsSessional,
+  webEngineeringSessional,
+  machineLearningSessional,
+  artificialIntelligenceSessional,
+}
+
+extension AcademicCourseExtension on AcademicCourse {
+  String get displayName {
+    switch (this) {
+      case AcademicCourse.softwareDevelopmentProject1:
+        return 'Software Development Project-I';
+      case AcademicCourse.softwareDevelopmentProject2:
+        return 'Software Development Project-II';
+      case AcademicCourse.softwareEngineeringSessional:
+        return 'Software Engineering Sessional';
+      case AcademicCourse.databaseManagementSystemsSessional:
+        return 'Database Management Systems Sessional';
+      case AcademicCourse.webEngineeringSessional:
+        return 'Web Engineering Sessional';
+      case AcademicCourse.machineLearningSessional:
+        return 'Machine Learning Sessional';
+      case AcademicCourse.artificialIntelligenceSessional:
+        return 'Artificial Intelligence Sessional';
     }
   }
 }

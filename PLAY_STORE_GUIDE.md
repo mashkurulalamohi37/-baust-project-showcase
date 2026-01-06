@@ -16,7 +16,7 @@ You need a private key to sign your app. **Keep this safe!** If you lose it, you
 1.  Open your terminal/command prompt.
 2.  Run the following command (copy-paste explicitly):
     ```powershell
-    keytool -genkey -v -keystore d:\projectShowcase\android\upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+    & "C:\Program Files\Android\Android Studio\jbr\bin\keytool.exe" -genkey -v -keystore d:\projectShowcase\android\upload-keystore.jks -keyalg RSA -keysize 2048 -validity 10000 -alias upload
     ```
     *(Note: You might need to add `keytool` to your PATH or run it from the Java bin directory. It usually comes with Android Studio).*
 

@@ -979,20 +979,15 @@ class _ProjectReviewCard extends StatelessWidget {
     }
   }
 
-  void _rejectProject(BuildContext context, Project project) async {
-    final updatedProject = project.copyWith(status: ProjectStatus.rejected);
-    final teacher = authService.currentUser;
-    final success = await projectService.updateProject(
-      updatedProject,
-      approverId: teacher?.id,
-      approverName: teacher?.name,
+  void _rejectProject(BuildContext context, Project project) {
+    showDialog(
+      context: context,
+      builder: (context) => _RejectionDialog(
+        project: project,
+        projectService: projectService,
+        authService: authService,
+      ),
     );
-    
-    if (success && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('${project.title} rejected')),
-      );
-    }
   }
 
   void _giveFeedback(BuildContext context, Project project) {
@@ -1421,4 +1416,178 @@ bool _isProjectVisibleToTeacher(Project project, User? teacher) {
   // Other statuses: only visible to assigned teacher
   if (project.facultyId == null || project.facultyId!.isEmpty) return false;
   return project.facultyId == teacher.id;
+}
+class _RejectionDialog extends StatefulWidget {
+  const _RejectionDialog({
+    required this.project,
+    required this.projectService,
+    required this.authService,
+  });
+
+  final Project project;
+  final ProjectService projectService;
+  final AuthService authService;
+
+  @override
+  State<_RejectionDialog> createState() => _RejectionDialogState();
+}
+
+class _RejectionDialogState extends State<_RejectionDialog> {
+  final _reasonController = TextEditingController();
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _reasonController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.cancel, color: Colors.red, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              'Reject Project',
+              style: TextStyle(color: Colors.red[700]),
+            ),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Project: ${widget.project.title}',
+              style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'Please provide a reason for rejection:',
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _reasonController,
+              maxLines: 4,
+              decoration: InputDecoration(
+                labelText: 'Rejection Reason *',
+                hintText: 'Explain why this project is being rejected...',
+                border: OutlineInputBorder(),
+                filled: true,
+                fillColor: Colors.red.withOpacity(0.05),
+                focusedBorder: OutlineInputBorder(
+                  borderSide: BorderSide(color: Colors.red, width: 2),
+                ),
+              ),
+              autofocus: true,
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.orange.withOpacity(0.3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.info_outline, color: Colors.orange, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'The student will be notified with this reason.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.orange[900],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        FilledButton.icon(
+          onPressed: _isSubmitting ? null : _submitRejection,
+          icon: const Icon(Icons.cancel),
+          label: _isSubmitting
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+              : const Text('Reject Project'),
+          style: FilledButton.styleFrom(
+            backgroundColor: Colors.red,
+            foregroundColor: Colors.white,
+          ),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _submitRejection() async {
+    final reason = _reasonController.text.trim();
+    
+    if (reason.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please provide a rejection reason'),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSubmitting = true);
+
+    final teacher = widget.authService.currentUser;
+    if (teacher == null) return;
+
+    final updatedProject = widget.project.copyWith(
+      status: ProjectStatus.rejected,
+      rejectionReason: reason,
+    );
+    
+    final success = await widget.projectService.updateProject(
+      updatedProject,
+      approverId: teacher.id,
+      approverName: teacher.name,
+    );
+    
+    setState(() => _isSubmitting = false);
+
+    if (success && mounted) {
+      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${widget.project.title} rejected'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Failed to reject project'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
 }

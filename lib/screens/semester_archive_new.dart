@@ -13,7 +13,9 @@ class SemesterArchiveScreen extends StatefulWidget {
 
 class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
   final ProjectService _projectService = ProjectService();
-  
+  ProjectSubmissionType? _selectedSubmissionType;
+  AcademicCourse? _selectedAcademicCourse;
+
   // Gets unique (Year, Semester) pairs and counts projects
   Map<String, List<Project>> _groupProjectsBySemester() {
     final Map<String, List<Project>> grouped = {};
@@ -23,6 +25,29 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
       if (project.status != ProjectStatus.approved && 
           project.status != ProjectStatus.featured) {
         continue;
+      }
+
+      // Filter based on selection
+      if (_selectedSubmissionType != null) {
+        if (project.submissionType != _selectedSubmissionType) {
+           // Handle legacy projects (assume showcase if submissionType is null/default) - though new model has default.
+           // But wait, existing projects in JSON might not have the field.
+           // However, Project model default is projectShowcase, so it should be fine if serialized correctly.
+           // But standard json deserialization won't use default value if field is missing unless customized.
+           // Assuming data migration or default handling is in place or not needed for now directly.
+           // Actually, since I added the field to the class, runtime objects will have the default.
+           continue; 
+        }
+      } else {
+        // If nothing selected (shouldn't happen in this view function usage usually), maybe return all?
+        // But the UI logic will separate them.
+      }
+
+      if (_selectedSubmissionType == ProjectSubmissionType.academic && 
+          _selectedAcademicCourse != null) {
+        if (project.academicCourse != _selectedAcademicCourse) {
+          continue;
+        }
       }
 
       final key = '${project.semester.displayName} ${project.year}';
@@ -35,8 +60,218 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
     return grouped;
   }
 
+  void _resetSelection() {
+    setState(() {
+      _selectedAcademicCourse = null;
+      _selectedSubmissionType = null;
+    });
+  }
+
+  void _selectSubmissionType(ProjectSubmissionType type) {
+    setState(() {
+      _selectedSubmissionType = type;
+      _selectedAcademicCourse = null;
+    });
+  }
+
+  void _selectCourse(AcademicCourse course) {
+    setState(() {
+      _selectedAcademicCourse = course;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
+    // Top Level: Select Type
+    if (_selectedSubmissionType == null) {
+      return Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          title: const Text('Project Archives', style: TextStyle(fontWeight: FontWeight.bold)),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF232526), // Midnight City
+                  Color(0xFF414345),
+                ],
+              ),
+            ),
+          ),
+        ),
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Theme.of(context).colorScheme.surface,
+                Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+              ],
+            ),
+          ),
+          child: SingleChildScrollView(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 100, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const SizedBox(height: 20),
+                  Text(
+                    'Explore Collections',
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Browse through years of student innovation and academic excellence.',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                  _buildSelectionCard(
+                    'Project Showcase',
+                    Icons.rocket_launch_outlined,
+                    const LinearGradient(
+                      colors: [Color(0xFF2C3E50), Color(0xFF4CA1AF)], // Dark Slate to Blue Gray
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    () => _selectSubmissionType(ProjectSubmissionType.projectShowcase),
+                    'Creative projects, hackathons, and innovative showcases.',
+                  ),
+                  const SizedBox(height: 16),
+                  _buildSelectionCard(
+                    'Academic Research',
+                    Icons.school_outlined,
+                    const LinearGradient(
+                      colors: [Color(0xFF141E30), Color(0xFF243B55)], // Royal Navy
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    () => _selectSubmissionType(ProjectSubmissionType.academic),
+                    'Course projects, thesis work, and academic research.',
+                  ),
+                  // Add extra padding at bottom to ensure last card is fully visible/touchable above nav bar/safe area if needed
+                  const SizedBox(height: 40),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Academic Level: Select Course
+    if (_selectedSubmissionType == ProjectSubmissionType.academic && _selectedAcademicCourse == null) {
+       return Scaffold(
+        extendBodyBehindAppBar: true,
+        appBar: AppBar(
+          title: const Text('Academic Courses', style: TextStyle(fontWeight: FontWeight.bold)),
+          elevation: 0,
+          backgroundColor: Colors.transparent,
+          flexibleSpace: Container(
+            decoration: const BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color(0xFF232526),
+                  Color(0xFF414345),
+                ],
+              ),
+            ),
+          ),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => setState(() => _selectedSubmissionType = null), 
+          ),
+        ),
+        body: Container(
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Theme.of(context).colorScheme.surface,
+                Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+              ],
+            ),
+          ),
+          child: ListView.builder(
+          padding: const EdgeInsets.fromLTRB(20, 100, 20, 20),
+          itemCount: AcademicCourse.values.length,
+          itemBuilder: (context, index) {
+            final course = AcademicCourse.values[index];
+            return Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainer,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.08),
+                    blurRadius: 12,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+                border: Border.all(
+                  color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.3),
+                ),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                leading: Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF141E30), Color(0xFF243B55)], // Royal Navy
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.book_outlined,
+                    color: Colors.white,
+                    size: 24,
+                  ),
+                ),
+                title: Text(
+                  course.displayName,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                ),
+                subtitle: const Text('View projects'),
+                trailing: Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                onTap: () => _selectCourse(course),
+              ),
+            );
+          },
+        ),
+        ),
+      );
+    }
+
+    // Archive Grid View (Filtered)
     final groupedProjects = _groupProjectsBySemester();
     final keys = groupedProjects.keys.toList()
       ..sort((a, b) {
@@ -51,28 +286,76 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
         return (partsA[0] == 'Summer' ? 1 : 0).compareTo(partsB[0] == 'Summer' ? 1 : 0);
       });
 
+    String title = 'Project Archives';
+    if (_selectedSubmissionType == ProjectSubmissionType.projectShowcase) {
+      title = 'Project Showcase';
+    } else if (_selectedAcademicCourse != null) {
+      title = _selectedAcademicCourse!.displayName;
+    }
+
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: const Text('Project Archives'),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF232526), // Midnight City
+                Color(0xFF414345),
+              ],
+            ),
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            if (_selectedSubmissionType == ProjectSubmissionType.academic && _selectedAcademicCourse != null) {
+              setState(() => _selectedAcademicCourse = null);
+            } else {
+              setState(() => _selectedSubmissionType = null);
+            }
+          },
+        ),
       ),
-      body: groupedProjects.isEmpty
-          ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                   Icon(Icons.archive_outlined, size: 64, color: Colors.grey),
-                   SizedBox(height: 16),
-                   Text('No archives found'),
-                ],
-              ),
-            )
-      : GridView.builder(
-              padding: const EdgeInsets.all(16),
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [
+                Theme.of(context).colorScheme.surface,
+                Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+              ],
+            ),
+        ),
+        child: groupedProjects.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                     Icon(Icons.archive_outlined, size: 80, color: Theme.of(context).colorScheme.outline.withOpacity(0.5)),
+                     const SizedBox(height: 16),
+                     Text(
+                       'No archives found',
+                       style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                         color: Theme.of(context).colorScheme.onSurfaceVariant,
+                       ),
+                     ),
+                  ],
+                ),
+              )
+            : GridView.builder(
+              padding: const EdgeInsets.fromLTRB(16, 120, 16, 16),
               gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                 crossAxisCount: 2,
                 crossAxisSpacing: 16,
                 mainAxisSpacing: 16,
-                childAspectRatio: 1.0, // Increased height ratio to prevent overflow
+                childAspectRatio: 0.9,
               ),
               itemCount: keys.length,
               itemBuilder: (context, index) {
@@ -81,59 +364,109 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
                 final parts = key.split(' ');
                 final semesterName = parts[0];
                 final year = parts.length > 1 ? parts[1] : '';
+                
+                final isSummer = semesterName == 'Summer';
 
-                return Card(
-                  elevation: 2,
-                  clipBehavior: Clip.antiAlias,
-                  child: InkWell(
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => SemesterProjectsScreen(
-                            semesterName: semesterName,
-                            year: int.tryParse(year) ?? 0,
-                            projects: projects,
+                return Container(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(24),
+                    boxShadow: [
+                      BoxShadow(
+                        color: (isSummer ? Colors.orange : Colors.blue).withOpacity(0.2),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: Material(
+                    clipBehavior: Clip.antiAlias,
+                    borderRadius: BorderRadius.circular(24),
+                    child: InkWell(
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => SemesterProjectsScreen(
+                              semesterName: semesterName,
+                              year: int.tryParse(year) ?? 0,
+                              projects: projects,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: isSummer
+                                ? [const Color(0xFF667EEA), const Color(0xFF764BA2)] // Purple Dream
+                                : [const Color(0xFF11998E), const Color(0xFF38EF7D)], // Emerald Teal
                           ),
                         ),
-                      );
-                    },
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: semesterName == 'Summer'
-                              ? [Colors.orange.shade100, Colors.orange.shade50]
-                              : [Colors.blue.shade100, Colors.blue.shade50],
-                        ),
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
+                        child: Stack(
                           children: [
-                            Icon(
-                              semesterName == 'Summer' ? Icons.wb_sunny : Icons.ac_unit,
-                              size: 40,
-                              color: semesterName == 'Summer' ? Colors.orange[800] : Colors.blue[800],
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              key,
-                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black87,
+                            Positioned(
+                              right: -20,
+                              top: -20,
+                              child: Icon(
+                                isSummer ? Icons.wb_sunny : Icons.ac_unit,
+                                size: 100,
+                                color: Colors.white.withOpacity(0.15),
                               ),
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              '${projects.length} Projects',
-                              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.black54,
+                            Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withOpacity(0.25),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Icon(
+                                      isSummer ? Icons.wb_sunny : Icons.ac_unit,
+                                      size: 24,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const Spacer(),
+                                  Text(
+                                    semesterName,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  Text(
+                                    year,
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.white.withOpacity(0.9),
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      '${projects.length} Projects',
+                                      style: const TextStyle(
+                                        fontSize: 12,
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ],
@@ -144,6 +477,85 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
                 );
               },
             ),
+      ),
+    );
+  }
+
+  Widget _buildSelectionCard(String title, IconData icon, Gradient gradient, VoidCallback onTap, String subtitle) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainer,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.3),
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    gradient: gradient,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.1),
+                        blurRadius: 8,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Icon(icon, size: 28, color: Colors.white),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        subtitle,
+                        style: TextStyle(
+                          fontSize: 13,
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                          height: 1.3,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -173,132 +585,354 @@ class SemesterProjectsScreen extends StatelessWidget {
     });
 
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text('$semesterName $year Projects'),
+        title: Text(
+          '$semesterName $year Projects',
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        elevation: 0,
+        backgroundColor: Colors.transparent,
+        flexibleSpace: Container(
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color(0xFF232526),
+                Color(0xFF414345),
+              ],
+            ),
+          ),
+        ),
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16),
-        itemCount: sortedProjects.length,
-        itemBuilder: (context, index) {
-          final project = sortedProjects[index];
-          final awardInfo = _getAwardInfo(project.award);
-          
-          return Card(
-            margin: const EdgeInsets.only(bottom: 12),
-            elevation: project.award != ProjectAward.none ? 4 : 1,
-            shape: project.award != ProjectAward.none 
-                ? RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: awardInfo.color, width: 2),
-                  )
-                : null,
-            child: ListTile(
-              leading: project.award != ProjectAward.none
-                  ? CircleAvatar(
-                      backgroundColor: awardInfo.color.withOpacity(0.2),
-                      child: Icon(awardInfo.icon, color: awardInfo.color),
-                    )
-                  : CircleAvatar(
-                      backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-                      child: Text(
-                        project.title.isNotEmpty ? project.title.substring(0, 1).toUpperCase() : '?',
-                        style: TextStyle(
-                          color: Theme.of(context).colorScheme.onPrimaryContainer,
+      body: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [
+              Theme.of(context).colorScheme.surface,
+              Theme.of(context).colorScheme.surfaceContainerHighest.withOpacity(0.3),
+            ],
+          ),
+        ),
+        child: ListView.builder(
+          padding: const EdgeInsets.fromLTRB(16, 100, 16, 16),
+          itemCount: sortedProjects.length,
+          itemBuilder: (context, index) {
+            final project = sortedProjects[index];
+            final awardInfo = _getAwardInfo(project.award);
+            final hasAward = project.award != ProjectAward.none;
+            
+            return Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: hasAward
+                    ? [
+                        BoxShadow(
+                          color: awardInfo.color.withOpacity(0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
+                          spreadRadius: 2,
+                        ),
+                      ]
+                    : [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.08),
+                          blurRadius: 8,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
+              ),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(20),
+                clipBehavior: Clip.antiAlias,
+                child: InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => ProjectDetailScreen(
+                          project: project,
+                          projectService: ProjectService(),
+                          authService: AuthService(),
                         ),
                       ),
+                    );
+                  },
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: hasAward
+                          ? LinearGradient(
+                              begin: Alignment.topLeft,
+                              end: Alignment.bottomRight,
+                              colors: [
+                                awardInfo.color.withOpacity(0.15),
+                                awardInfo.color.withOpacity(0.05),
+                              ],
+                            )
+                          : null,
+                      color: hasAward ? null : Theme.of(context).colorScheme.surfaceContainer,
+                      border: hasAward
+                          ? Border.all(
+                              color: awardInfo.color.withOpacity(0.5),
+                              width: 2.5,
+                            )
+                          : Border.all(
+                              color: Theme.of(context).colorScheme.outlineVariant.withOpacity(0.3),
+                              width: 1,
+                            ),
+                      borderRadius: BorderRadius.circular(20),
                     ),
-              title: Row(
-                children: [
-                   Expanded(
-                     child: Text(
-                       project.title,
-                       maxLines: 1,
-                       overflow: TextOverflow.ellipsis,
-                       style: const TextStyle(fontWeight: FontWeight.bold),
-                     ),
-                   ),
-                   if (project.award != ProjectAward.none) ...[
-                     const SizedBox(width: 8),
-                     Container(
-                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                       decoration: BoxDecoration(
-                         color: awardInfo.color.withOpacity(0.1),
-                         borderRadius: BorderRadius.circular(4),
-                         border: Border.all(color: awardInfo.color, width: 1),
-                       ),
-                       child: Text(
-                         project.award.displayName,
-                         style: TextStyle(
-                           fontSize: 10,
-                           color: awardInfo.color,
-                           fontWeight: FontWeight.bold,
-                         ),
-                       ),
-                     ),
-                   ],
-                ],
-              ),
-              subtitle: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('By ${project.authorName}'),
-                  const SizedBox(height: 4),
-                  Row(
-                    children: [
-                       const Icon(Icons.star, size: 14, color: Colors.amber),
-                       Text(' ${project.rating.toStringAsFixed(1)}'),
-                       const SizedBox(width: 12),
-                       Container(
-                         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                         decoration: BoxDecoration(
-                           color: Theme.of(context).colorScheme.secondaryContainer,
-                           borderRadius: BorderRadius.circular(4),
-                         ),
-                         child: Text(
-                           project.category.displayName,
-                           style: TextStyle(
-                             fontSize: 10,
-                             color: Theme.of(context).colorScheme.onSecondaryContainer,
-                             fontWeight: FontWeight.w500,
-                           ),
-                         ),
-                       ),
-                    ],
-                  ),
-                ],
-              ),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => ProjectDetailScreen(
-                      project: project,
-                      projectService: ProjectService(),
-                      authService: AuthService(),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Row(
+                        children: [
+                          // Leading Icon/Avatar
+                          if (hasAward)
+                            Container(
+                              width: 64,
+                              height: 64,
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    awardInfo.color,
+                                    awardInfo.color.withOpacity(0.7),
+                                  ],
+                                ),
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: awardInfo.color.withOpacity(0.4),
+                                    blurRadius: 12,
+                                    offset: const Offset(0, 4),
+                                  ),
+                                ],
+                              ),
+                              child: Icon(
+                                awardInfo.icon,
+                                color: Colors.white,
+                                size: 32,
+                              ),
+                            )
+                          else
+                            Container(
+                              width: 48,
+                              height: 48,
+                              decoration: BoxDecoration(
+                                color: Theme.of(context).colorScheme.primaryContainer,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  project.title.isNotEmpty ? project.title.substring(0, 1).toUpperCase() : '?',
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.onPrimaryContainer,
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 20,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          const SizedBox(width: 16),
+                          
+                          // Content
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Title
+                                Text(
+                                  project.title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: hasAward ? 17 : 16,
+                                    color: hasAward
+                                        ? Theme.of(context).colorScheme.onSurface
+                                        : null,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                
+                                // Author and Award Badge Row
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Text(
+                                        'By ${project.authorName}',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                          fontWeight: hasAward ? FontWeight.w500 : FontWeight.normal,
+                                        ),
+                                      ),
+                                    ),
+                                    if (hasAward) ...[
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              awardInfo.color,
+                                              awardInfo.color.withOpacity(0.8),
+                                            ],
+                                          ),
+                                          borderRadius: BorderRadius.circular(6),
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: awardInfo.color.withOpacity(0.4),
+                                              blurRadius: 6,
+                                              offset: const Offset(0, 2),
+                                            ),
+                                          ],
+                                        ),
+                                        child: Text(
+                                          project.award.displayName,
+                                          style: const TextStyle(
+                                            fontSize: 10,
+                                            color: Colors.white,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 0.3,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                
+                                // Rating and Category
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.star,
+                                      size: 16,
+                                      color: hasAward ? awardInfo.color : Colors.amber,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      project.rating.toStringAsFixed(1),
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                        color: hasAward ? awardInfo.color : null,
+                                      ),
+                                    ),
+                                    if (project.reviewCount > 0) ...[
+                                      Text(
+                                        ' (${project.reviewCount})',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                    const SizedBox(width: 12),
+                                    Flexible(
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: hasAward
+                                              ? awardInfo.color.withOpacity(0.2)
+                                              : Theme.of(context).colorScheme.secondaryContainer,
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: hasAward
+                                              ? Border.all(
+                                                  color: awardInfo.color.withOpacity(0.4),
+                                                  width: 1,
+                                                )
+                                              : null,
+                                        ),
+                                        child: Text(
+                                          project.category.displayName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 10,
+                                            color: hasAward
+                                                ? awardInfo.color
+                                                : Theme.of(context).colorScheme.onSecondaryContainer,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                          
+                          // Trailing Arrow
+                          Icon(
+                            Icons.arrow_forward_ios_rounded,
+                            size: 20,
+                            color: hasAward
+                                ? awardInfo.color
+                                : Theme.of(context).colorScheme.onSurfaceVariant.withOpacity(0.5),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                );
-              },
-            ),
-          );
-        },
+                ),
+              ),
+            );
+          },
+        ),
       ),
     );
   }
 
-  ({Color color, IconData icon}) _getAwardInfo(ProjectAward award) {
+  ({Color color, IconData icon, Gradient gradient}) _getAwardInfo(ProjectAward award) {
     switch (award) {
       case ProjectAward.winner:
-        return (color: const Color(0xFFFFD700), icon: Icons.emoji_events); // Gold
+        return (
+          color: const Color(0xFFFFB800), // Rich Gold
+          icon: Icons.emoji_events,
+          gradient: const LinearGradient(
+            colors: [Color(0xFFFFD700), Color(0xFFFFB800)],
+          ),
+        );
       case ProjectAward.firstRunnerUp:
-        return (color: const Color(0xFFC0C0C0), icon: Icons.emoji_events); // Silver
+        return (
+          color: const Color(0xFFA8A8A8), // Polished Silver
+          icon: Icons.emoji_events,
+          gradient: const LinearGradient(
+            colors: [Color(0xFFC0C0C0), Color(0xFFA8A8A8)],
+          ),
+        );
       case ProjectAward.secondRunnerUp:
-        return (color: const Color(0xFFCD7F32), icon: Icons.emoji_events); // Bronze
+        return (
+          color: const Color(0xFFB87333), // Rich Bronze
+          icon: Icons.emoji_events,
+          gradient: const LinearGradient(
+            colors: [Color(0xFFCD7F32), Color(0xFFB87333)],
+          ),
+        );
       case ProjectAward.thirdRunnerUp:
-        return (color: Colors.blue, icon: Icons.workspace_premium);
+        return (
+          color: const Color(0xFF4A90E2), // Premium Blue
+          icon: Icons.workspace_premium,
+          gradient: const LinearGradient(
+            colors: [Color(0xFF5B9FED), Color(0xFF4A90E2)],
+          ),
+        );
       default:
-        return (color: Colors.grey, icon: Icons.star);
+        return (
+          color: Colors.grey,
+          icon: Icons.star,
+          gradient: const LinearGradient(
+            colors: [Colors.grey, Colors.grey],
+          ),
+        );
     }
   }
 }

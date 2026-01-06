@@ -10,8 +10,7 @@ import '../mvc/controllers/firestore_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import 'dart:html' as html show IFrameElement;
-import 'dart:ui_web' as ui_web;
+import '../utils/youtube_web/youtube_web_shim.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
   const ProjectDetailScreen({
@@ -288,7 +287,65 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                           Text('By ${currentProject.authorName}'),
                         ],
                       ),
-                      // Show supervisor info if available
+                      
+                      // Show Rejection Reason if project is rejected
+                      if (currentProject.status == ProjectStatus.rejected && 
+                          currentProject.rejectionReason != null && 
+                          currentProject.rejectionReason!.isNotEmpty) ...[ 
+                        const SizedBox(height: 16),
+                        Container(
+                          width: double.infinity,
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.red.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: Colors.red.withOpacity(0.4),
+                              width: 2,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.cancel_outlined,
+                                    color: Colors.red[700],
+                                    size: 24,
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    'Rejection Reason',
+                                    style: TextStyle(
+                                      color: Colors.red[700],
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                child: Text(
+                                  currentProject.rejectionReason!,
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey[800],
+                                    height: 1.5,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                       // Show supervisor info if available
                       if (currentProject.supervisor != null && currentProject.supervisor!.isNotEmpty) ...[
                         const SizedBox(height: 8),
                         FutureBuilder<List<User>>(
@@ -340,6 +397,50 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                           },
                         ),
                       ],
+
+                      // Show Assistant Teacher Info
+                      if (currentProject.submissionType == ProjectSubmissionType.academic &&
+                          currentProject.assistantTeacherId != null &&
+                          currentProject.assistantTeacherId!.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        FutureBuilder<User?>(
+                          future: FirestoreService.getUser(currentProject.assistantTeacherId!),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) return const SizedBox.shrink();
+                            final assistantUser = snapshot.data!;
+                            return Row(
+                              children: [
+                                Icon(Icons.person_outline, size: 16, color: Colors.teal),
+                                const SizedBox(width: 4),
+                                Expanded(
+                                  child: RichText(
+                                    text: TextSpan(
+                                      style: TextStyle(
+                                        color: Colors.teal[700],
+                                        fontWeight: FontWeight.w500,
+                                        fontSize: 14,
+                                      ),
+                                      children: [
+                                        const TextSpan(text: 'Assistant Teacher: '),
+                                        TextSpan(text: assistantUser.name),
+                                        if (assistantUser.designation != null)
+                                          TextSpan(
+                                            text: ' (${assistantUser.designation!.displayName})',
+                                            style: TextStyle(
+                                              fontStyle: FontStyle.italic,
+                                              color: Colors.teal[600],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          },
+                        ),
+                      ],
+                      
                       // Show faculty (approver) info if available
                       if (currentProject.facultyName != null && currentProject.facultyName!.isNotEmpty) ...[
                         const SizedBox(height: 8),
@@ -399,6 +500,51 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                           },
                         ),
                       ],
+                      // Show Submission Type Info
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Icon(
+                            currentProject.submissionType == ProjectSubmissionType.academic
+                                ? Icons.school
+                                : Icons.public,
+                            size: 16,
+                            color: Colors.teal,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            '${currentProject.submissionType == ProjectSubmissionType.academic ? 'Academic Submission' : 'Project Showcase'} • ${currentProject.semester.displayName} ${currentProject.year}',
+                            style: TextStyle(
+                              color: Colors.teal[700],
+                              fontWeight: FontWeight.w500,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                      
+                      // Show Course Name for Academic Projects
+                      if (currentProject.submissionType == ProjectSubmissionType.academic && 
+                          currentProject.academicCourse != null) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            Icon(Icons.book, size: 16, color: Colors.indigo),
+                            const SizedBox(width: 4),
+                            Expanded(
+                              child: Text(
+                                currentProject.academicCourse!.displayName,
+                                style: TextStyle(
+                                  color: Colors.indigo[700],
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 14,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+
                     ],
                   ),
                 ),
@@ -429,7 +575,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     builder: (context) {
                       final videoId = YoutubePlayer.convertUrlToId(currentProject.youtubeUrl!);
                       if (videoId != null) {
-                        return _buildWebYoutubePlayer(videoId);
+                        return buildWebYoutubePlayer(videoId);
                       }
                       return _buildInvalidYoutubeCard();
                     },
@@ -1760,31 +1906,7 @@ class _RevisionUploadDialogState extends State<_RevisionUploadDialog> {
 }
 
 
-  Widget _buildWebYoutubePlayer(String videoId) {
-    // Register iframe view
-    final String viewId = 'youtube-player-$videoId';
-    
-    // Register the iframe element
-    // ignore: undefined_prefixed_name
-    ui_web.platformViewRegistry.registerViewFactory(
-      viewId,
-      (int viewId) {
-        final iframe = html.IFrameElement()
-          ..src = 'https://www.youtube.com/embed/$videoId?enablejsapi=1&origin=${Uri.base.origin}'
-          ..style.border = 'none'
-          ..style.width = '100%'
-          ..style.height = '100%'
-          ..allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture'
-          ..allowFullscreen = true;
-        return iframe;
-      },
-    );
 
-    return AspectRatio(
-      aspectRatio: 16 / 9,
-      child: HtmlElementView(viewType: viewId),
-    );
-  }
 
 class CustomYoutubePlayerBuilder extends StatefulWidget {
   final Widget player;
