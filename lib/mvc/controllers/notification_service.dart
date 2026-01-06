@@ -40,13 +40,17 @@ class NotificationService extends ChangeNotifier {
 
     debugPrint('NotificationService: Starting initialization...');
 
-    // Request permissions for Android 13+
-    final permissionStatus = await Permission.notification.request();
-    debugPrint('NotificationService: Permission status: $permissionStatus');
-    
-    if (permissionStatus.isDenied || permissionStatus.isPermanentlyDenied) {
-      debugPrint('NotificationService: WARNING - Notification permission denied!');
-      debugPrint('NotificationService: User needs to enable notifications in device settings');
+    // Request permissions (Android/iOS only)
+    if (!kIsWeb) {
+      final permissionStatus = await Permission.notification.request();
+      debugPrint('NotificationService: Permission status: $permissionStatus');
+      
+      if (permissionStatus.isDenied || permissionStatus.isPermanentlyDenied) {
+        debugPrint('NotificationService: WARNING - Notification permission denied!');
+        debugPrint('NotificationService: User needs to enable notifications in device settings');
+      }
+    } else {
+      debugPrint('NotificationService: Skipping permission request on Web');
     }
 
     const AndroidInitializationSettings initializationSettingsAndroid =
