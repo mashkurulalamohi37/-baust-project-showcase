@@ -16,6 +16,11 @@ import 'package:file_picker/file_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 
+// Web-specific imports for Firebase plugins
+import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
+import 'package:cloud_firestore/cloud_firestore.dart' as firestore;
+import 'package:firebase_storage/firebase_storage.dart' as storage;
+
 // Global AuthService instance
 final AuthService globalAuthService = AuthService();
 
