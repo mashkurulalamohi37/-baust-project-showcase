@@ -61,6 +61,18 @@
   <!-- YouTube Iframe API -->
   <script src="https://www.youtube.com/iframe_api"></script>
 
+  <!-- Firebase Configuration (must be defined before Firebase SDK loads) -->
+  <script>
+    window.flutterfire_web_config = {
+      apiKey: "AIzaSyBUduwQCS_4HXaEmn_Ilf57BxDA9DT865g",
+      authDomain: "projectshowcase-b2748.firebaseapp.com",
+      projectId: "projectshowcase-b2748",
+      storageBucket: "projectshowcase-b2748.firebasestorage.app",
+      messagingSenderId: "279672202046",
+      appId: "1:279672202046:web:b409f9affe2a8bd4fd826f"
+    };
+  </script>
+
   <!-- Firebase SDK -->
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
@@ -339,7 +351,7 @@
     // Service Worker Registration
     if ('serviceWorker' in navigator) {
       window.addEventListener('load', () => {
-        navigator.serviceWorker.register('flutter_service_worker.js?v=2850154111')
+        navigator.serviceWorker.register('flutter_service_worker.js?v=4142797533')
           .then(registration => {
             console.log('Service Worker registered successfully:', registration.scope);
           })
