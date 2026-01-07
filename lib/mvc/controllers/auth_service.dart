@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:firebase_auth/firebase_auth.dart' as fb_auth;
+import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user.dart';
 import 'firestore_service.dart';
 import 'notification_service.dart';
@@ -173,9 +174,120 @@ class AuthService extends ChangeNotifier {
         _setLoading(false);
         return false;
       }
+      _setLoading(false);
+      return false;
+    }
+  }
+
+  Future<bool> signInWithGoogle(UserRole role) async {
+    _setLoading(true);
+    _setError(null);
+    _pendingRole = role;
+
+    try {
+      // 1. Trigger Google Sign In
+      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        _setLoading(false);
+        return false; // User canceled
+      }
+
+      // 2. Get credentials
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final fb_auth.AuthCredential credential = fb_auth.GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // 3. Sign in to Firebase Auth
+      final fb_auth.UserCredential userCredential = await _auth.signInWithCredential(credential);
+      final fb_auth.User? firebaseUser = userCredential.user;
+
+      if (firebaseUser == null) {
+        _setError('Google Sign In failed to retrieve user');
+        _setLoading(false);
+        return false;
+      }
+
+      // 4. Check/Create user in Firestore
+      User? existingUser = await FirestoreService.getUserByEmail(firebaseUser.email!);
+
+      if (existingUser != null) {
+        // User exists - Log them in
+        
+        // Check role consistency (optional: strictly enforce or allow login if they have a different role?)
+        // For now, let's warn if roles mismatch but allow login as their ACTUAL role
+        if (existingUser.role != role) {
+           debugPrint('Warning: User logged in with Google as ${role.name} but exists as ${existingUser.role.name}');
+           // You could block this:
+           // _setError('This email is registered as a ${existingUser.role.name}. Please select the correct role.');
+           // _setLoading(false);
+           // return false;
+        }
+
+        if (!existingUser.isActive) {
+          _setError('Your account has been deactivated.');
+          _setLoading(false);
+          return false;
+        }
+
+        if (existingUser.role == UserRole.teacher && !existingUser.isApproved) {
+           _setError('Your teacher account is pending admin approval.');
+           _setLoading(false);
+           return false;
+        }
+
+        _currentUser = existingUser.copyWith(
+          lastLoginAt: DateTime.now(),
+        );
+        await FirestoreService.updateUser(_currentUser!);
+        await _persistCurrentUser();
+        
+        _setLoading(false);
+        notifyListeners();
+        return true;
+
+      } else {
+        // New User - Create account
+        final isApproved = role != UserRole.teacher;
+        
+        final newUser = User(
+          id: firebaseUser.uid,
+          name: firebaseUser.displayName ?? 'Google User',
+          email: firebaseUser.email!,
+          role: role,
+          createdAt: DateTime.now(),
+          password: '', // No password for Google users
+          updatedAt: DateTime.now(),
+          isApproved: isApproved,
+          approvedAt: isApproved ? DateTime.now() : null,
+          approvedBy: isApproved ? 'system' : null,
+          lastLoginAt: DateTime.now(),
+          imageUrl: firebaseUser.photoURL,
+        );
+
+        await FirestoreService.saveUser(newUser);
+        
+        if (role == UserRole.teacher) {
+          await FirestoreService.logTeacherRegistered(newUser);
+          final notificationService = NotificationService();
+          await notificationService.notifyAdminsTeacherApprovalRequest(newUser);
+          
+          _setError('Teacher account created! Pending admin approval.');
+          _setLoading(false);
+          notifyListeners();
+          return true; // Return true but they can't do much until approved
+        } else {
+          _currentUser = newUser;
+          await _persistCurrentUser();
+          _setLoading(false);
+          notifyListeners();
+          return true;
+        }
+      }
     } catch (e) {
-      debugPrint('Login error: $e');
-      _setError('Login failed: ${e.toString()}');
+      debugPrint('Google Sign In error: $e');
+      _setError('Google Sign In failed: ${e.toString()}');
       _setLoading(false);
       return false;
     }

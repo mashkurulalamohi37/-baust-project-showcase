@@ -268,6 +268,30 @@ class _LoginFormState extends State<_LoginForm> {
     }
   }
 
+  Future<void> _handleGoogleSignIn() async {
+    try {
+      final success = await widget.authService.signInWithGoogle(widget.selectedRole);
+      
+      if (success && mounted) {
+        debugPrint('Google Sign In successful, calling onSubmit');
+        widget.onSubmit();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.authService.errorMessage ?? 'Google Sign In failed'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
@@ -349,6 +373,33 @@ class _LoginFormState extends State<_LoginForm> {
                             'Continue',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                           ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('OR', style: Theme.of(context).textTheme.bodySmall),
+                    ),
+                    Expanded(child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: widget.authService.isLoading ? null : _handleGoogleSignIn,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    icon: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Center(child: Text('G', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                    ),
+                    label: const Text('Sign in with Google'),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -466,6 +517,34 @@ class _SignupFormState extends State<_SignupForm> {
             content: Text('An error occurred: ${e.toString()}'),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleGoogleSignIn() async {
+    try {
+      final success = await widget.authService.signInWithGoogle(_selectedRole);
+      
+      if (success && mounted) {
+        debugPrint('Google Sign In successful, calling onEnter');
+        widget.onEnter(_selectedRole);
+      } else if (mounted) {
+        final errorMessage = widget.authService.errorMessage ?? 'Google Sign In failed';
+         if (errorMessage.contains('approval')) {
+             // Teacher pending approval specific handling usually just a snackbar
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
         );
       }
     }
@@ -657,6 +736,33 @@ class _SignupFormState extends State<_SignupForm> {
                             'Create Account',
                             style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                           ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('OR', style: Theme.of(context).textTheme.bodySmall),
+                    ),
+                    Expanded(child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: widget.authService.isLoading ? null : _handleGoogleSignIn,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                    ),
+                    icon: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: Center(child: Text('G', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                    ),
+                    label: const Text('Sign up with Google'),
                   ),
                 ),
                 const SizedBox(height: 16),
