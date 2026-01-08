@@ -4,6 +4,7 @@ class Review {
   final String reviewerId;
   final String reviewerName;
   final String? reviewerDesignation;
+  final String? reviewerProfileImageUrl; // Profile image URL from Google Sign-In
   final double rating;
   final String comment;
   final DateTime createdAt;
@@ -14,6 +15,7 @@ class Review {
     required this.reviewerId,
     required this.reviewerName,
     this.reviewerDesignation,
+    this.reviewerProfileImageUrl,
     required this.rating,
     required this.comment,
     required this.createdAt,
@@ -26,6 +28,7 @@ class Review {
       'reviewerId': reviewerId,
       'reviewerName': reviewerName,
       'reviewerDesignation': reviewerDesignation,
+      'reviewerProfileImageUrl': reviewerProfileImageUrl,
       'rating': rating,
       'comment': comment,
       'createdAt': createdAt.toIso8601String(),
@@ -39,6 +42,7 @@ class Review {
       reviewerId: map['reviewerId'] ?? '',
       reviewerName: map['reviewerName'] ?? '',
       reviewerDesignation: map['reviewerDesignation'],
+      reviewerProfileImageUrl: map['reviewerProfileImageUrl'],
       rating: (map['rating'] ?? 0.0).toDouble(),
       comment: map['comment'] ?? '',
       createdAt: DateTime.parse(map['createdAt'] ?? DateTime.now().toIso8601String()),
@@ -51,6 +55,7 @@ class Review {
     String? reviewerId,
     String? reviewerName,
     String? reviewerDesignation,
+    String? reviewerProfileImageUrl,
     double? rating,
     String? comment,
     DateTime? createdAt,
@@ -61,6 +66,7 @@ class Review {
       reviewerId: reviewerId ?? this.reviewerId,
       reviewerName: reviewerName ?? this.reviewerName,
       reviewerDesignation: reviewerDesignation ?? this.reviewerDesignation,
+      reviewerProfileImageUrl: reviewerProfileImageUrl ?? this.reviewerProfileImageUrl,
       rating: rating ?? this.rating,
       comment: comment ?? this.comment,
       createdAt: createdAt ?? this.createdAt,

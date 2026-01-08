@@ -480,23 +480,46 @@ class NotificationService extends ChangeNotifier {
   /// Notify all admins when a teacher requests approval
   Future<bool> notifyAdminsTeacherApprovalRequest(User teacher) async {
     try {
+      debugPrint('NotificationService: Starting teacher approval notification for ${teacher.name}');
+      
       // Get all admins
       final users = await FirestoreService.getAllUsers();
+      debugPrint('NotificationService: Retrieved ${users.length} total users from database');
+      
       final admins = users.where((user) => user.role == UserRole.admin).toList();
+      debugPrint('NotificationService: Found ${admins.length} admin(s)');
+
+      if (admins.isEmpty) {
+        debugPrint('NotificationService: WARNING - No admins found in database!');
+        return false;
+      }
 
       // Send notification to each admin
+      int successCount = 0;
       for (final admin in admins) {
-        await sendNotification(
+        debugPrint('NotificationService: Sending notification to admin: ${admin.name} (${admin.email})');
+        debugPrint('NotificationService: Admin notifications enabled: ${admin.notificationsEnabled}');
+        
+        final success = await sendNotification(
           userId: admin.id,
           title: 'New Teacher Approval Request 👨‍🏫',
           message: '${teacher.name} (${teacher.email}) has requested teacher account approval.',
           type: NotificationType.teacherApprovalRequest,
         );
+        
+        if (success) {
+          successCount++;
+          debugPrint('NotificationService: ✅ Notification sent to ${admin.name}');
+        } else {
+          debugPrint('NotificationService: ❌ Failed to send notification to ${admin.name}');
+        }
       }
 
-      return true;
+      debugPrint('NotificationService: Sent ${successCount}/${admins.length} notifications successfully');
+      return successCount > 0;
     } catch (e) {
-      debugPrint('Error notifying admins of teacher approval request: $e');
+      debugPrint('NotificationService: ❌ ERROR notifying admins of teacher approval request: $e');
+      debugPrint('NotificationService: Stack trace: ${StackTrace.current}');
       return false;
     }
   }

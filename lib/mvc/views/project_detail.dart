@@ -61,6 +61,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       projectId: widget.project.id,
       reviewerId: currentUser.id,
       reviewerName: currentUser.name,
+      reviewerProfileImageUrl: currentUser.profileImageUrl, // Include profile image
       rating: _rating,
       comment: _commentController.text.trim(),
       createdAt: DateTime.now(),
@@ -322,7 +323,12 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 margin: const EdgeInsets.symmetric(vertical: 4),
                 child: ListTile(
                   leading: CircleAvatar(
-                    child: Text(review.reviewerName?[0].toUpperCase() ?? 'R'),
+                    backgroundImage: review.reviewerProfileImageUrl != null && review.reviewerProfileImageUrl!.isNotEmpty
+                        ? NetworkImage(review.reviewerProfileImageUrl!)
+                        : null,
+                    child: review.reviewerProfileImageUrl == null || review.reviewerProfileImageUrl!.isEmpty
+                        ? Text(review.reviewerName?[0].toUpperCase() ?? 'R')
+                        : null,
                   ),
                   title: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

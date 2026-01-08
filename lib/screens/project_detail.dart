@@ -845,7 +845,12 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 ...projectReviews.map((review) => Card(
                   child: ListTile(
                     leading: CircleAvatar(
-                      child: Text((review.reviewerName.isNotEmpty ? review.reviewerName[0] : 'R').toUpperCase()),
+                      backgroundImage: review.reviewerProfileImageUrl != null && review.reviewerProfileImageUrl!.isNotEmpty
+                          ? NetworkImage(review.reviewerProfileImageUrl!)
+                          : null,
+                      child: review.reviewerProfileImageUrl == null || review.reviewerProfileImageUrl!.isEmpty
+                          ? Text((review.reviewerName.isNotEmpty ? review.reviewerName[0] : 'R').toUpperCase())
+                          : null,
                     ),
                     title: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,

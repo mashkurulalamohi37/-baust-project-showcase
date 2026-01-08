@@ -19,130 +19,95 @@ class _AuthGateState extends State<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final size = MediaQuery.of(context).size;
+
     return Scaffold(
-      body: SafeArea(
+      body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
-          child: Column(
-            children: <Widget>[
-              const SizedBox(height: 24),
-              Text(
-                'projectshow',
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.w700),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
-              Text('Explore projects & theses', textAlign: TextAlign.center, style: Theme.of(context).textTheme.bodyMedium),
-              const SizedBox(height: 32),
-              _RoleCard(
-                title: UserRole.student.displayName,
-                icon: Icons.school,
-                description: UserRole.student.description,
-                isSelected: _selectedRole == UserRole.student,
-                onTap: () => setState(() => _selectedRole = UserRole.student),
-              ),
-              const SizedBox(height: 12),
-              _RoleCard(
-                title: UserRole.teacher.displayName,
-                icon: Icons.rate_review,
-                description: UserRole.teacher.description,
-                isSelected: _selectedRole == UserRole.teacher,
-                onTap: () => setState(() => _selectedRole = UserRole.teacher),
-              ),
-              const SizedBox(height: 12),
-              _RoleCard(
-                title: UserRole.admin.displayName,
-                icon: Icons.admin_panel_settings,
-                description: UserRole.admin.description,
-                isSelected: _selectedRole == UserRole.admin,
-                onTap: () => setState(() => _selectedRole = UserRole.admin),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                height: MediaQuery.of(context).size.height * 0.6,
-                child: _AuthTabs(
-                  authService: widget.authService,
-                  selectedRole: _selectedRole,
-                  onEnter: widget.onEnter,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _RoleCard extends StatelessWidget {
-  const _RoleCard({
-    required this.title,
-    required this.icon,
-    required this.description,
-    this.isSelected = false,
-    this.onTap,
-  });
-  final String title;
-  final IconData icon;
-  final String description;
-  final bool isSelected;
-  final VoidCallback? onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    final ColorScheme scheme = Theme.of(context).colorScheme;
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isSelected ? scheme.primaryContainer : scheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(
-          color: isSelected ? scheme.primary : scheme.outlineVariant,
-          width: isSelected ? 2 : 1,
-        ),
-      ),
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-      child: Row(
-        children: <Widget>[
-            Icon(icon, color: isSelected ? scheme.onPrimaryContainer : null),
-          const SizedBox(width: 12),
-          Expanded(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: <Widget>[
-                  Text(
-                    title,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w600,
-                      color: isSelected ? scheme.onPrimaryContainer : null,
+                Text(
+                  'ProjectShowcase',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Select your role to continue',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                
+                // Compact Segmented Control for Roles
+                SegmentedButton<UserRole>(
+                  segments: [
+                    ButtonSegment(
+                      value: UserRole.student,
+                      label: const Text('Student'),
+                      icon: const Icon(Icons.school, size: 18),
+                    ),
+                    ButtonSegment(
+                      value: UserRole.teacher,
+                      label: const Text('Teacher'),
+                      icon: const Icon(Icons.rate_review, size: 18),
+                    ),
+                    ButtonSegment(
+                      value: UserRole.admin,
+                      label: const Text('Admin'),
+                      icon: const Icon(Icons.admin_panel_settings, size: 18),
+                    ),
+                  ],
+                  selected: {_selectedRole},
+                  onSelectionChanged: (Set<UserRole> selection) {
+                    setState(() => _selectedRole = selection.first);
+                  },
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 12),
+                    selectedBackgroundColor: theme.colorScheme.primary,
+                    selectedForegroundColor: theme.colorScheme.onPrimary,
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // Auth Forms inside a clear container
+                Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: theme.colorScheme.outlineVariant),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: _AuthTabs(
+                      authService: widget.authService,
+                      selectedRole: _selectedRole,
+                      onEnter: widget.onEnter,
                     ),
                   ),
-                const SizedBox(height: 4),
-                  Text(
-                    description,
-                    style: TextStyle(
-                      color: isSelected ? scheme.onPrimaryContainer.withOpacity(0.8) : null,
-                    ),
-                  ),
+                ),
               ],
             ),
           ),
-            if (isSelected)
-              Icon(Icons.check_circle, color: scheme.primary)
-            else
-              FilledButton.tonal(
-                onPressed: onTap,
-                child: const Text('Select'),
-              ),
-          ],
         ),
       ),
     );
   }
 }
+
 
 class _AuthTabs extends StatefulWidget {
   const _AuthTabs({
@@ -165,10 +130,18 @@ class _AuthTabsState extends State<_AuthTabs> with SingleTickerProviderStateMixi
   void initState() {
     super.initState();
     _controller = TabController(length: 2, vsync: this);
+    _controller.addListener(_handleTabSelection);
+  }
+
+  void _handleTabSelection() {
+    if (_controller.indexIsChanging || _controller.animation?.value == _controller.index) {
+       setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_handleTabSelection);
     _controller.dispose();
     super.dispose();
   }
@@ -180,22 +153,24 @@ class _AuthTabsState extends State<_AuthTabs> with SingleTickerProviderStateMixi
       children: <Widget>[
         TabBar(controller: _controller, tabs: const <Tab>[Tab(text: 'Login'), Tab(text: 'Sign Up')]),
         const SizedBox(height: 12),
-        Expanded(
-          child: TabBarView(
-            controller: _controller,
-            children: <Widget>[
-              _LoginForm(
-                authService: widget.authService,
-                selectedRole: widget.selectedRole,
-                onSubmit: () => widget.onEnter(widget.selectedRole),
-              ),
-              _SignupForm(
-                authService: widget.authService,
-                initialRole: widget.selectedRole,
-                onEnter: widget.onEnter,
-              ),
-            ],
-          ),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (Widget child, Animation<double> animation) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          child: _controller.index == 0
+              ? _LoginForm(
+                  key: const ValueKey('Login'),
+                  authService: widget.authService,
+                  selectedRole: widget.selectedRole,
+                  onSubmit: () => widget.onEnter(widget.selectedRole),
+                )
+              : _SignupForm(
+                  key: const ValueKey('Signup'),
+                  authService: widget.authService,
+                  initialRole: widget.selectedRole,
+                  onEnter: widget.onEnter,
+                ),
         ),
       ],
     );
@@ -204,6 +179,7 @@ class _AuthTabsState extends State<_AuthTabs> with SingleTickerProviderStateMixi
 
 class _LoginForm extends StatefulWidget {
   const _LoginForm({
+    super.key,
     required this.authService,
     required this.selectedRole,
     required this.onSubmit,
@@ -270,7 +246,10 @@ class _LoginFormState extends State<_LoginForm> {
 
   Future<void> _handleGoogleSignIn() async {
     try {
-      final success = await widget.authService.signInWithGoogle(widget.selectedRole);
+      final success = await widget.authService.signInWithGoogle(
+        widget.selectedRole,
+        isSignup: false, // Login flow - require existing account
+      );
       
       if (success && mounted) {
         debugPrint('Google Sign In successful, calling onSubmit');
@@ -297,15 +276,13 @@ class _LoginFormState extends State<_LoginForm> {
     return AnimatedBuilder(
       animation: widget.authService,
       builder: (context, child) {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              children: <Widget>[
-                const SizedBox(height: 16),
-                TextFormField(
-                  controller: _emailController,
+        return Form(
+          key: _formKey,
+          child: Column(
+            children: <Widget>[
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
                     labelText: 'Email',
@@ -393,20 +370,24 @@ class _LoginFormState extends State<_LoginForm> {
                     onPressed: widget.authService.isLoading ? null : _handleGoogleSignIn,
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      side: const BorderSide(color: Colors.grey),
                     ),
-                    icon: SizedBox(
-                      width: 24,
+                    icon: Image.network(
+                      'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/768px-Google_%22G%22_logo.svg.png',
                       height: 24,
-                      child: Center(child: Text('G', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                      width: 24,
+                      errorBuilder: (context, error, stackTrace) => 
+                        const Icon(Icons.g_mobiledata, size: 28, color: Colors.blue),
                     ),
-                    label: const Text('Sign in with Google'),
+                    label: const Text('Continue with Google', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 ),
                 const SizedBox(height: 16),
               ],
             ),
-          ),
-        );
+          );
       },
     );
   }
@@ -414,6 +395,7 @@ class _LoginFormState extends State<_LoginForm> {
 
 class _SignupForm extends StatefulWidget {
   const _SignupForm({
+    super.key,
     required this.authService,
     required this.initialRole,
     required this.onEnter,
@@ -436,6 +418,12 @@ class _SignupFormState extends State<_SignupForm> {
   final _employeeIdController = TextEditingController();
   final _phoneController = TextEditingController();
   late UserRole _selectedRole;
+  Designation? _selectedDesignation;
+  
+  // Custom error texts for Google Sign-In validation (only for required fields)
+  String? _nameError;
+  String? _departmentError;
+  String? _designationError;
 
   @override
   void dispose() {
@@ -524,7 +512,64 @@ class _SignupFormState extends State<_SignupForm> {
 
   Future<void> _handleGoogleSignIn() async {
     try {
-      final success = await widget.authService.signInWithGoogle(_selectedRole);
+      // For teachers, validate only the essential fields for Google Sign-In
+      if (_selectedRole == UserRole.teacher) {
+        // Clear previous errors and check required fields
+        bool hasErrors = false;
+        String? nameErr;
+        String? deptErr;
+        String? desigErr;
+        
+        if (_nameController.text.trim().isEmpty) {
+          hasErrors = true;
+          nameErr = 'Please enter your full name';
+        }
+        if (_departmentController.text.trim().isEmpty) {
+          hasErrors = true;
+          deptErr = 'Please enter your department';
+        }
+        if (_selectedDesignation == null) {
+          hasErrors = true;
+          desigErr = 'Please select your designation';
+        }
+        
+        if (hasErrors) {
+          // Set custom errors only for the 3 required fields
+          setState(() {
+            _nameError = nameErr;
+            _departmentError = deptErr;
+            _designationError = desigErr;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Please complete required fields above'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+          return;
+        }
+        
+        // Clear errors if validation passes
+        setState(() {
+          _nameError = null;
+          _departmentError = null;
+          _designationError = null;
+        });
+      }
+      
+      final success = await widget.authService.signInWithGoogle(
+        _selectedRole,
+        isSignup: true, // Signup flow - allow account creation
+        name: _selectedRole == UserRole.teacher ? _nameController.text.trim() : null,
+        department: _selectedRole == UserRole.teacher ? _departmentController.text.trim() : null,
+        employeeId: _selectedRole == UserRole.teacher && _employeeIdController.text.trim().isNotEmpty 
+            ? _employeeIdController.text.trim() 
+            : null, // Optional for Google Sign-In
+        designation: _selectedRole == UserRole.teacher ? _selectedDesignation : null,
+        phoneNumber: _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
+      );
       
       if (success && mounted) {
         debugPrint('Google Sign In successful, calling onEnter');
@@ -555,16 +600,14 @@ class _SignupFormState extends State<_SignupForm> {
     return AnimatedBuilder(
       animation: widget.authService,
       builder: (context, child) {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              children: <Widget>[
-                const SizedBox(height: 16),
-                // Role selection (Student or Teacher only)
-                DropdownButtonFormField<UserRole>(
-                  value: _selectedRole,
+        return Form(
+          key: _formKey,
+          child: Column(
+            children: <Widget>[
+              const SizedBox(height: 16),
+              // Role selection (Student or Teacher only)
+              DropdownButtonFormField<UserRole>(
+                value: _selectedRole,
                   decoration: const InputDecoration(
                     labelText: 'Role',
                     border: OutlineInputBorder(),
@@ -581,13 +624,19 @@ class _SignupFormState extends State<_SignupForm> {
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Full Name',
                     hintText: 'Enter your first and last name',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person_outline),
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.person_outline),
+                    errorText: _nameError,
                   ),
                   textCapitalization: TextCapitalization.words,
+                  onChanged: (_) {
+                    if (_nameError != null) {
+                      setState(() => _nameError = null);
+                    }
+                  },
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your full name';
@@ -603,13 +652,19 @@ class _SignupFormState extends State<_SignupForm> {
                 if (_selectedRole == UserRole.teacher) ...[
                   TextFormField(
                     controller: _departmentController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Department',
                       hintText: 'e.g., Computer Science, Engineering',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.business),
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.business),
+                      errorText: _departmentError,
                     ),
                     textCapitalization: TextCapitalization.words,
+                    onChanged: (_) {
+                      if (_departmentError != null) {
+                        setState(() => _departmentError = null);
+                      }
+                    },
                     validator: (value) {
                       if (_selectedRole == UserRole.teacher && (value == null || value.trim().isEmpty)) {
                         return 'Please enter your department';
@@ -634,6 +689,35 @@ class _SignupFormState extends State<_SignupForm> {
                         return 'Please enter your employee ID';
                       }
                       return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<Designation>(
+                    decoration: InputDecoration(
+                      labelText: 'Designation',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.workspace_premium),
+                      errorText: _designationError,
+                    ),
+                    items: Designation.values.map((designation) {
+                      return DropdownMenuItem(
+                        value: designation,
+                        child: Text(designation.displayName),
+                      );
+                    }).toList(),
+                    validator: (value) {
+                      if (_selectedRole == UserRole.teacher && value == null) {
+                        return 'Please select your designation';
+                      }
+                      return null;
+                    },
+                    onChanged: (Designation? value) {
+                      setState(() {
+                        _selectedDesignation = value;
+                        if (_designationError != null) {
+                          _designationError = null;
+                        }
+                      });
                     },
                   ),
                   const SizedBox(height: 16),
@@ -756,20 +840,24 @@ class _SignupFormState extends State<_SignupForm> {
                     onPressed: widget.authService.isLoading ? null : _handleGoogleSignIn,
                     style: OutlinedButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      side: const BorderSide(color: Colors.grey),
                     ),
-                    icon: SizedBox(
-                      width: 24,
+                    icon: Image.network(
+                      'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/768px-Google_%22G%22_logo.svg.png',
                       height: 24,
-                      child: Center(child: Text('G', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold))),
+                      width: 24,
+                      errorBuilder: (context, error, stackTrace) => 
+                        const Icon(Icons.g_mobiledata, size: 28, color: Colors.blue),
                     ),
-                    label: const Text('Sign up with Google'),
+                    label: const Text('Sign up with Google', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
                   ),
                 ),
                 const SizedBox(height: 16),
               ],
             ),
-          ),
-        );
+          );
       },
     );
   }

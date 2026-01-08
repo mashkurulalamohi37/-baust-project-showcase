@@ -386,14 +386,19 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         child: CircleAvatar(
           radius: 50,
           backgroundColor: Colors.white,
-          child: Text(
-            user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
-            style: TextStyle(
-              fontSize: 44,
-              fontWeight: FontWeight.bold,
-              color: colorScheme.primary,
-            ),
-          ),
+          backgroundImage: user.profileImageUrl != null && user.profileImageUrl!.isNotEmpty
+              ? NetworkImage(user.profileImageUrl!)
+              : null,
+          child: user.profileImageUrl == null || user.profileImageUrl!.isEmpty
+              ? Text(
+                  user.name.isNotEmpty ? user.name[0].toUpperCase() : 'U',
+                  style: TextStyle(
+                    fontSize: 44,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                  ),
+                )
+              : null,
         ),
       ),
     );

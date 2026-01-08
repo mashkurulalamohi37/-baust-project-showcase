@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
-import 'screens/auth.dart';
+import 'mvc/views/auth.dart';
 import 'screens/search_filter.dart';
 import 'screens/project_detail.dart';
 import 'screens/student_dashboard.dart';
@@ -27,21 +27,83 @@ final AuthService globalAuthService = AuthService();
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialize Firebase (for Firestore, Auth, and Storage)
+  // 1. Show loading screen immediately to prevent black screen
+  runApp(const MaterialApp(
+    home: Scaffold(
+      backgroundColor: Color(0xFF0E121A), // Dark theme background
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(color: Color(0xFF4F46E5)), // Primary color
+            SizedBox(height: 20),
+            Text(
+              'Starting projectshow...', 
+              style: TextStyle(color: Colors.white70),
+              textDirection: TextDirection.ltr,
+            ),
+          ],
+        ),
+      ),
+    ),
+    debugShowCheckedModeBanner: false,
+  ));
+  
+  // 2. Initialize Firebase (for Firestore, Auth, and Storage)
   try {
     await Firebase.initializeApp(
       options: DefaultFirebaseOptions.currentPlatform,
     );
     debugPrint('Firebase initialized successfully');
     
-    // Initialize Local Notifications
-    await NotificationService().initialize();
+    // Initialize Local Notifications safely
+    try {
+      // We can initialize this in the background, or await it if critical.
+      // Since it handles permissions, doing it here might pop up permission dialogs 
+      // on top of the loading screen, which is fine.
+      // However, to keep startup fast, we might want to delegate this purely to AppShell
+      // But AppShell logic we added previously is also good.
+      // Let's leave it to AppShell to handle notification init to avoid further delays here.
+    } catch (e) {
+      debugPrint('Notification init skipped in main: $e');
+    }
+
   } catch (e) {
     debugPrint('Firebase initialization error: $e');
     debugPrint('Please check your Firebase configuration in firebase_options.dart');
-    // Continue anyway - the app might still work with cached data
+    
+    // In case of fatal error, show it
+    runApp(MaterialApp(
+      home: Scaffold(
+        backgroundColor: const Color(0xFF0E121A),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(20.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.error_outline, color: Colors.red, size: 48),
+                const SizedBox(height: 16),
+                const Text(
+                  'Initialization Failed',
+                  style: TextStyle(color: Colors.white, fontSize: 20),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  e.toString(),
+                  style: const TextStyle(color: Colors.white70),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    ));
+    return;
   }
   
+  // 3. Run the main app
   runApp(const MyApp());
 }
 
@@ -234,6 +296,14 @@ class _AppShellState extends State<AppShell> {
     try {
       debugPrint('AppShell: Starting app initialization');
       
+      // Initialize Local Notifications (moved from main)
+      try {
+        await NotificationService().initialize();
+        debugPrint('AppShell: Notifications initialized');
+      } catch (e) {
+        debugPrint('AppShell: Notification initialization failed: $e');
+      }
+
       // Wait a bit for services to initialize, but with a timeout
       await Future.delayed(const Duration(milliseconds: 500)).timeout(
         const Duration(seconds: 3),

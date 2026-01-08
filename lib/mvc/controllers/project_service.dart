@@ -418,6 +418,7 @@ class ProjectService extends ChangeNotifier {
         reviewerId: reviewerId,
         reviewerName: finalReviewerName,
         reviewerDesignation: reviewerDesignation,
+        reviewerProfileImageUrl: currentUser?.profileImageUrl, // Include profile picture
         rating: rating,
         comment: comment,
         createdAt: DateTime.now(),

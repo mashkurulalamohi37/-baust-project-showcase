@@ -176,17 +176,31 @@ class AuthService extends ChangeNotifier {
       }
       _setLoading(false);
       return false;
+    } catch (e) {
+      debugPrint('Login error: $e');
+      _setError('Login failed: ${e.toString()}');
+      _setLoading(false);
+      return false;
     }
   }
 
-  Future<bool> signInWithGoogle(UserRole role) async {
+  Future<bool> signInWithGoogle(
+    UserRole role, {
+    bool isSignup = false,
+    String? name,
+    String? department,
+    String? employeeId,
+    Designation? designation,
+    String? phoneNumber,
+  }) async {
     _setLoading(true);
     _setError(null);
     _pendingRole = role;
 
     try {
       // 1. Trigger Google Sign In
-      final GoogleSignInAccount? googleUser = await GoogleSignIn().signIn();
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
         _setLoading(false);
         return false; // User canceled
@@ -248,12 +262,21 @@ class AuthService extends ChangeNotifier {
         return true;
 
       } else {
-        // New User - Create account
+        // User doesn't exist in Firestore
+        
+        // If this is a LOGIN attempt (not signup), block it
+        if (!isSignup) {
+          _setError('No account found. Please sign up first.');
+          _setLoading(false);
+          return false;
+        }
+        
+        // New User - Create account (only during signup)
         final isApproved = role != UserRole.teacher;
         
         final newUser = User(
           id: firebaseUser.uid,
-          name: firebaseUser.displayName ?? 'Google User',
+          name: name ?? firebaseUser.displayName ?? 'Google User', // Use form name if provided
           email: firebaseUser.email!,
           role: role,
           createdAt: DateTime.now(),
@@ -263,10 +286,21 @@ class AuthService extends ChangeNotifier {
           approvedAt: isApproved ? DateTime.now() : null,
           approvedBy: isApproved ? 'system' : null,
           lastLoginAt: DateTime.now(),
-          imageUrl: firebaseUser.photoURL,
+          profileImageUrl: firebaseUser.photoURL,
+          department: department, // Use form data
+          employeeId: employeeId, // Use form data
+          designation: designation, // Use form data
+          phoneNumber: phoneNumber, // Use form data
         );
 
-        await FirestoreService.saveUser(newUser);
+        try {
+          await FirestoreService.saveUser(newUser);
+        } catch (e) {
+          debugPrint('AuthService: Failed to create user in Firestore: $e');
+          _setError('Failed to create account. Please try again.');
+          _setLoading(false);
+          return false;
+        }
         
         if (role == UserRole.teacher) {
           await FirestoreService.logTeacherRegistered(newUser);
@@ -276,7 +310,7 @@ class AuthService extends ChangeNotifier {
           _setError('Teacher account created! Pending admin approval.');
           _setLoading(false);
           notifyListeners();
-          return true; // Return true but they can't do much until approved
+          return false; // Stay on auth screen
         } else {
           _currentUser = newUser;
           await _persistCurrentUser();
@@ -476,6 +510,16 @@ class AuthService extends ChangeNotifier {
     _currentUser = null;
     _errorMessage = null;
     NotificationService().clearNotifications();
+    
+    // Sign out from Google to clear cached account (force account picker on next sign-in)
+    try {
+      final GoogleSignIn googleSignIn = GoogleSignIn();
+      await googleSignIn.signOut();
+      debugPrint('AuthService: Google Sign-In session cleared');
+    } catch (e) {
+      debugPrint('AuthService: Error signing out from Google: $e');
+    }
+    
     await _clearPersistedUser();
     notifyListeners();
   }
