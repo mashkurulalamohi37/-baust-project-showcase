@@ -8,6 +8,9 @@ import '../models/user.dart';
 import 'firestore_service.dart';
 import 'notification_service.dart';
 
+// Web OAuth client ID for Google Sign-In
+const String _webClientId = '279672202046-8t6j868337v67mf8m8a2ceqjer0e4d0m.apps.googleusercontent.com';
+
 class AuthService extends ChangeNotifier {
   // Singleton instance so auth state is shared app-wide
   static final AuthService _instance = AuthService._internal();
@@ -199,7 +202,9 @@ class AuthService extends ChangeNotifier {
 
     try {
       // 1. Trigger Google Sign In
-      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignIn googleSignIn = kIsWeb
+          ? GoogleSignIn(clientId: _webClientId)
+          : GoogleSignIn();
       final GoogleSignInAccount? googleUser = await googleSignIn.signIn();
       if (googleUser == null) {
         _setLoading(false);
@@ -513,7 +518,9 @@ class AuthService extends ChangeNotifier {
     
     // Sign out from Google to clear cached account (force account picker on next sign-in)
     try {
-      final GoogleSignIn googleSignIn = GoogleSignIn();
+      final GoogleSignIn googleSignIn = kIsWeb
+          ? GoogleSignIn(clientId: _webClientId)
+          : GoogleSignIn();
       await googleSignIn.signOut();
       debugPrint('AuthService: Google Sign-In session cleared');
     } catch (e) {
@@ -529,12 +536,21 @@ class AuthService extends ChangeNotifier {
     _setError(null);
 
     try {
+      print('AuthService: Updating user profile for ${updatedUser.email}');
+      print('AuthService: New designation: ${updatedUser.designation?.displayName}');
+      
       await FirestoreService.updateUser(updatedUser);
+      print('AuthService: Firestore update successful');
+      
       _currentUser = updatedUser;
+      await _persistCurrentUser(); // Persist to local storage
+      print('AuthService: Local storage update successful');
+      
       _setLoading(false);
       notifyListeners();
       return true;
     } catch (e) {
+      print('AuthService: Error updating user profile: $e');
       _setError('Failed to update profile: ${e.toString()}');
       _setLoading(false);
       return false;

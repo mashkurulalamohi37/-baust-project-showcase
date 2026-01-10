@@ -108,6 +108,7 @@ class FirestoreService {
         'createdAt': user.createdAt.toIso8601String(),
         'updatedAt': user.updatedAt.toIso8601String(),
         'designation': user.designation?.name,
+        'notificationsEnabled': user.notificationsEnabled,
       });
       print('User saved successfully: $normalizedEmail');
     } catch (e) {
@@ -336,6 +337,7 @@ class FirestoreService {
               orElse: () => Designation.lecturer,
             )
           : (role == UserRole.teacher ? Designation.lecturer : null),
+      notificationsEnabled: _boolField(data, 'notificationsEnabled', defaultValue: true),
     );
   }
 
@@ -392,6 +394,10 @@ class FirestoreService {
     try {
       final normalizedEmail = _normalizeEmail(user.email);
       final updatedAt = user.updatedAt;
+      
+      print('FirestoreService: Updating user ${user.id}');
+      print('FirestoreService: Designation to save: ${user.designation?.name} (${user.designation?.displayName})');
+      
       await _firestore.collection(_usersCollection).doc(user.id).update({
         'email': normalizedEmail,
         'emailLowercase': normalizedEmail,
@@ -410,10 +416,11 @@ class FirestoreService {
         'isActive': user.isActive,
         'updatedAt': updatedAt.toIso8601String(),
         'designation': user.designation?.name,
+        'notificationsEnabled': user.notificationsEnabled,
       });
-      print('User updated successfully: $normalizedEmail');
+      print('FirestoreService: User updated successfully: $normalizedEmail');
     } catch (e) {
-      print('ERROR: Failed to update user: $e');
+      print('FirestoreService: ERROR - Failed to update user: $e');
       rethrow;
     }
   }

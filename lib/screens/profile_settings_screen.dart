@@ -223,13 +223,19 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
       setState(() => _isLoading = true);
 
       try {
+        print('ProfileSettings: Old designation: ${user.designation?.displayName}');
+        print('ProfileSettings: New designation: ${result.displayName}');
+        
         final updatedUser = user.copyWith(
           designation: result,
           updatedAt: DateTime.now(),
         );
 
+        print('ProfileSettings: Calling FirestoreService.updateUser...');
         await FirestoreService.updateUser(updatedUser);
+        print('ProfileSettings: Calling AuthService.updateUserProfile...');
         await _authService.updateUserProfile(updatedUser);
+        print('ProfileSettings: Update complete!');
 
         setState(() {
           _selectedDesignation = result;
@@ -245,6 +251,7 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
           );
         }
       } catch (e) {
+        print('ProfileSettings: Error updating designation: $e');
         setState(() => _isLoading = false);
 
         if (mounted) {
