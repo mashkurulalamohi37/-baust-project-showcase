@@ -449,8 +449,12 @@ class ProjectService extends ChangeNotifier {
       await updateProject(updatedProject);
       
       // Send notification for new review
+      debugPrint('ProjectService: Preparing to send review notification to student');
+      debugPrint('ProjectService: Student (author) ID: ${project.authorId}');
+      debugPrint('ProjectService: Reviewer name: ${review.reviewerName}');
       final notificationService = NotificationService();
       await notificationService.notifyNewReview(project.authorId, project, review.reviewerName);
+      debugPrint('ProjectService: Review notification call completed');
       
       // Log activity for review
       await FirestoreService.logProjectReviewed(project, review.reviewerName);

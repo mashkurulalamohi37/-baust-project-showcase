@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../controllers/notification_service.dart' as notification_service;
-import '../controllers/auth_service.dart';
-import '../../screens/project_detail.dart';
-import '../controllers/project_service.dart';
-import '../controllers/firestore_service.dart';
+import '../mvc/controllers/notification_service.dart' as notification_service;
+import '../mvc/controllers/auth_service.dart';
+import 'project_detail.dart';
+import '../mvc/controllers/project_service.dart';
+import '../mvc/controllers/firestore_service.dart';
 import 'profile_settings_screen.dart';
 
 class NotificationsScreen extends StatefulWidget {
@@ -323,7 +323,7 @@ class _NotificationCard extends StatelessWidget {
       case notification_service.NotificationType.projectNeedsRevision:
         return Colors.orange;
       case notification_service.NotificationType.projectFeatured:
-        return Colors.purple;
+        return Colors.amber[700]!;
       case notification_service.NotificationType.newReview:
         return Colors.blue;
       case notification_service.NotificationType.systemMessage:

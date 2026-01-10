@@ -380,13 +380,26 @@ class NotificationService extends ChangeNotifier {
   }
 
   Future<bool> notifyNewReview(String userId, Project project, String reviewerName) async {
-    return await sendNotification(
+    debugPrint('NotificationService: Notifying student about new review');
+    debugPrint('NotificationService: Student ID: $userId');
+    debugPrint('NotificationService: Project: ${project.title}');
+    debugPrint('NotificationService: Reviewer: $reviewerName');
+    
+    final result = await sendNotification(
       userId: userId,
       title: 'New Review',
       message: '$reviewerName reviewed your project "${project.title}".',
       type: NotificationType.newReview,
       projectId: project.id,
     );
+    
+    if (result) {
+      debugPrint('NotificationService: ✅ Review notification sent successfully to student $userId');
+    } else {
+      debugPrint('NotificationService: ❌ Failed to send review notification to student $userId');
+    }
+    
+    return result;
   }
 
   Future<bool> notifyTeacherApproved(String userId) async {

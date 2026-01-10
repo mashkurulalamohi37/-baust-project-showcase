@@ -997,7 +997,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       case ProjectStatus.rejected:
         return Colors.red;
       case ProjectStatus.featured:
-        return Colors.purple;
+        return Colors.amber[700]!;
       case ProjectStatus.needsRevision:
         return Colors.amber;
       case ProjectStatus.resubmitted:

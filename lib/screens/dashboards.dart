@@ -105,7 +105,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                       icon: Icons.star,
                       label: 'Featured',
                       value: _projectService.featuredProjects.length.toString(),
-                      color: Colors.purple,
+                      color: Colors.amber[700]!,
                     ),
                   ),
                 ],
@@ -349,7 +349,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     icon: Icons.star,
                     label: 'Featured',
                     value: projectsByStatus[ProjectStatus.featured]?.length.toString() ?? '0',
-                    color: Colors.purple,
+                    color: Colors.amber[700]!,
                   ),
                 ],
               ),
@@ -487,7 +487,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       case ProjectStatus.rejected:
         return Colors.red;
       case ProjectStatus.featured:
-        return Colors.purple;
+        return Colors.amber[700]!;
       case ProjectStatus.needsRevision:
         return Colors.amber;
       case ProjectStatus.resubmitted:

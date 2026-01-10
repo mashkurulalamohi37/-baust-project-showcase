@@ -6,9 +6,9 @@ import '../mvc/controllers/project_service.dart';
 import '../mvc/controllers/auth_service.dart';
 import 'project_detail.dart';
 import 'semester_archive_new.dart';
-import '../mvc/views/profile_settings_screen.dart';
+import 'profile_settings_screen.dart';
 import '../mvc/controllers/notification_service.dart';
-import '../mvc/views/notifications_screen.dart';
+import 'notifications_screen.dart';
 
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -373,6 +373,40 @@ class _ReviewTabState extends State<_ReviewTab> {
           )
         else
           ...approvedProjects.take(3).map((project) => _ProjectReviewCard(
+            project: project,
+            projectService: widget.projectService,
+            authService: widget.authService,
+            onTap: () => _openProjectDetail(context, project),
+            showReviewActions: false,
+          )),
+
+        const SizedBox(height: 24),
+
+        // Featured Projects
+        Text(
+          'Featured Projects',
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        if (widget.projectService.featuredProjects.isEmpty)
+          const Card(
+            child: Padding(
+              padding: EdgeInsets.all(32),
+              child: Center(
+                child: Column(
+                  children: [
+                    Icon(Icons.star_border, size: 48, color: Colors.grey),
+                    SizedBox(height: 8),
+                    Text('No featured projects yet'),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          ...widget.projectService.featuredProjects.take(3).map((project) => _ProjectReviewCard(
             project: project,
             projectService: widget.projectService,
             authService: widget.authService,

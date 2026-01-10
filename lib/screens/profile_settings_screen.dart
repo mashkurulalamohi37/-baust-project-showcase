@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
-import '../models/user.dart';
-import '../controllers/auth_service.dart';
-import '../controllers/firestore_service.dart';
+import '../mvc/models/user.dart';
+import '../mvc/controllers/auth_service.dart';
+import '../mvc/controllers/firestore_service.dart';
 
 class ProfileSettingsScreen extends StatefulWidget {
   const ProfileSettingsScreen({Key? key}) : super(key: key);

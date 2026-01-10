@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'theme.dart';
-import 'mvc/views/auth.dart';
+import 'screens/auth.dart';
 import 'screens/search_filter.dart';
 import 'screens/project_detail.dart';
 import 'screens/student_dashboard.dart';
@@ -260,6 +260,9 @@ class _AppShellState extends State<AppShell> {
     
     // Listen to auth changes and update project service
     _authService.addListener(_onAuthStateChanged);
+    
+    // Explicitly sync initial state in case user is already logged in
+    _onAuthStateChanged();
     
     // Start initialization
     _initializeApp();

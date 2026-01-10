@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../mvc/controllers/auth_service.dart';
 import '../mvc/models/user.dart';
-import '../mvc/views/forgot_password_screen.dart';
+import 'forgot_password_screen.dart';
 
 typedef RoleSelected = void Function(UserRole role);
 
@@ -23,71 +23,83 @@ class _AuthGateState extends State<AuthGate> {
     final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      body: Container(
-        width: double.infinity,
-        height: double.infinity,
-        decoration: BoxDecoration(
-          gradient: LinearGradient(
-            colors: [
-              theme.colorScheme.primary.withOpacity(0.08),
-              theme.colorScheme.secondary.withOpacity(0.08),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: SafeArea(
-          child: Center(
-            child: ConstrainedBox(
-              constraints: BoxConstraints(
-                maxWidth: size.width > 1000 ? 1100 : 900,
-                maxHeight: size.height * 0.9,
-              ),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                child: Card(
-                  elevation: 6,
-                  color: theme.colorScheme.surface,
-                  shadowColor: theme.colorScheme.primary.withOpacity(0.2),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: <Widget>[
+                Text(
+                  'ProjectShowcase',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'Select your role to continue',
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                
+                // Compact Segmented Control for Roles
+                SegmentedButton<UserRole>(
+                  segments: [
+                    ButtonSegment(
+                      value: UserRole.student,
+                      label: const Text('Student'),
+                      icon: const Icon(Icons.school, size: 18),
+                    ),
+                    ButtonSegment(
+                      value: UserRole.teacher,
+                      label: const Text('Teacher'),
+                      icon: const Icon(Icons.rate_review, size: 18),
+                    ),
+                    ButtonSegment(
+                      value: UserRole.admin,
+                      label: const Text('Admin'),
+                      icon: const Icon(Icons.admin_panel_settings, size: 18),
+                    ),
+                  ],
+                  selected: {_selectedRole},
+                  onSelectionChanged: (Set<UserRole> selection) {
+                    setState(() => _selectedRole = selection.first);
+                  },
+                  showSelectedIcon: false,
+                  style: SegmentedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 12),
+                    selectedBackgroundColor: theme.colorScheme.primary,
+                    selectedForegroundColor: theme.colorScheme.onPrimary,
+                  ),
+                ),
+                
+                const SizedBox(height: 24),
+                
+                // Auth Forms inside a clear container
+                Card(
+                  elevation: 0,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    side: BorderSide(color: theme.colorScheme.outlineVariant),
+                  ),
                   child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: <Widget>[
-                        Text(
-                          'ProjectShowcase',
-                          style: theme.textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Select your role to continue',
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.bodySmall?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant,
-                          ),
-                        ),
-                        const SizedBox(height: 16),
-                        _RoleSelector(
-                          selectedRole: _selectedRole,
-                          onRoleChanged: (role) => setState(() => _selectedRole = role),
-                        ),
-                        const SizedBox(height: 16),
-                        Expanded(
-                          child: _AuthTabs(
-                            authService: widget.authService,
-                            selectedRole: _selectedRole,
-                            onEnter: widget.onEnter,
-                          ),
-                        ),
-                      ],
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    child: _AuthTabs(
+                      authService: widget.authService,
+                      selectedRole: _selectedRole,
+                      onEnter: widget.onEnter,
                     ),
                   ),
                 ),
-              ),
+              ],
             ),
           ),
         ),
@@ -96,45 +108,6 @@ class _AuthGateState extends State<AuthGate> {
   }
 }
 
-class _RoleSelector extends StatelessWidget {
-  const _RoleSelector({
-    required this.selectedRole,
-    required this.onRoleChanged,
-  });
-  final UserRole selectedRole;
-  final ValueChanged<UserRole> onRoleChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final scheme = Theme.of(context).colorScheme;
-    return SegmentedButton<UserRole>(
-      segments: [
-        ButtonSegment(
-          value: UserRole.student,
-          label: Text(UserRole.student.displayName),
-          icon: const Icon(Icons.school, size: 18),
-        ),
-        ButtonSegment(
-          value: UserRole.teacher,
-          label: Text(UserRole.teacher.displayName),
-          icon: const Icon(Icons.rate_review, size: 18),
-        ),
-        ButtonSegment(
-          value: UserRole.admin,
-          label: Text(UserRole.admin.displayName),
-          icon: const Icon(Icons.admin_panel_settings, size: 18),
-        ),
-      ],
-      selected: {selectedRole},
-      onSelectionChanged: (Set<UserRole> selection) {
-        onRoleChanged(selection.first);
-      },
-      style: SegmentedButton.styleFrom(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
-      ),
-    );
-  }
-}
 
 class _AuthTabs extends StatefulWidget {
   const _AuthTabs({
@@ -157,10 +130,18 @@ class _AuthTabsState extends State<_AuthTabs> with SingleTickerProviderStateMixi
   void initState() {
     super.initState();
     _controller = TabController(length: 2, vsync: this);
+    _controller.addListener(_handleTabSelection);
+  }
+
+  void _handleTabSelection() {
+    if (_controller.indexIsChanging || _controller.animation?.value == _controller.index) {
+       setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_handleTabSelection);
     _controller.dispose();
     super.dispose();
   }
@@ -169,30 +150,27 @@ class _AuthTabsState extends State<_AuthTabs> with SingleTickerProviderStateMixi
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
-      mainAxisSize: MainAxisSize.min,
       children: <Widget>[
-        TabBar(
-          controller: _controller,
-          tabs: const <Tab>[Tab(text: 'Login'), Tab(text: 'Sign Up')],
-          labelStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 8),
-        Expanded(
-          child: TabBarView(
-            controller: _controller,
-            children: <Widget>[
-              _LoginForm(
-                authService: widget.authService,
-                selectedRole: widget.selectedRole,
-                onSubmit: () => widget.onEnter(widget.selectedRole),
-              ),
-              _SignupForm(
-                authService: widget.authService,
-                initialRole: widget.selectedRole,
-                onEnter: widget.onEnter,
-              ),
-            ],
-          ),
+        TabBar(controller: _controller, tabs: const <Tab>[Tab(text: 'Login'), Tab(text: 'Sign Up')]),
+        const SizedBox(height: 12),
+        AnimatedSwitcher(
+          duration: const Duration(milliseconds: 300),
+          transitionBuilder: (Widget child, Animation<double> animation) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          child: _controller.index == 0
+              ? _LoginForm(
+                  key: const ValueKey('Login'),
+                  authService: widget.authService,
+                  selectedRole: widget.selectedRole,
+                  onSubmit: () => widget.onEnter(widget.selectedRole),
+                )
+              : _SignupForm(
+                  key: const ValueKey('Signup'),
+                  authService: widget.authService,
+                  initialRole: widget.selectedRole,
+                  onEnter: widget.onEnter,
+                ),
         ),
       ],
     );
@@ -201,6 +179,7 @@ class _AuthTabsState extends State<_AuthTabs> with SingleTickerProviderStateMixi
 
 class _LoginForm extends StatefulWidget {
   const _LoginForm({
+    super.key,
     required this.authService,
     required this.selectedRole,
     required this.onSubmit,
@@ -217,7 +196,6 @@ class _LoginFormState extends State<_LoginForm> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  bool _hidePassword = true;
 
   @override
   void dispose() {
@@ -266,27 +244,50 @@ class _LoginFormState extends State<_LoginForm> {
     }
   }
 
+  Future<void> _handleGoogleSignIn() async {
+    try {
+      final success = await widget.authService.signInWithGoogle(
+        widget.selectedRole,
+        isSignup: false, // Login flow - require existing account
+      );
+      
+      if (success && mounted) {
+        debugPrint('Google Sign In successful, calling onSubmit');
+        widget.onSubmit();
+      } else if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(widget.authService.errorMessage ?? 'Google Sign In failed'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: widget.authService,
       builder: (context, child) {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                TextFormField(
-                  controller: _emailController,
+        return Form(
+          key: _formKey,
+          child: Column(
+            children: <Widget>[
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                   decoration: const InputDecoration(
                     labelText: 'Email',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.email, size: 20),
-                    filled: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    prefixIcon: Icon(Icons.email),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -298,20 +299,14 @@ class _LoginFormState extends State<_LoginForm> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordController,
-                  obscureText: _hidePassword,
-                  decoration: InputDecoration(
+                  obscureText: true,
+                  decoration: const InputDecoration(
                     labelText: 'Password',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.lock, size: 20),
-                    filled: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                    suffixIcon: IconButton(
-                      icon: Icon(_hidePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
-                      onPressed: () => setState(() => _hidePassword = !_hidePassword),
-                    ),
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock),
                   ),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
@@ -337,13 +332,13 @@ class _LoginFormState extends State<_LoginForm> {
                     child: const Text('Forgot Password?'),
                   ),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: widget.authService.isLoading ? null : _handleLogin,
                     style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                     child: widget.authService.isLoading
                         ? const SizedBox(
@@ -353,14 +348,46 @@ class _LoginFormState extends State<_LoginForm> {
                           )
                         : const Text(
                             'Continue',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                           ),
                   ),
                 ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('OR', style: Theme.of(context).textTheme.bodySmall),
+                    ),
+                    Expanded(child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: widget.authService.isLoading ? null : _handleGoogleSignIn,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      side: const BorderSide(color: Colors.grey),
+                    ),
+                    icon: Image.network(
+                      'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/768px-Google_%22G%22_logo.svg.png',
+                      height: 24,
+                      width: 24,
+                      errorBuilder: (context, error, stackTrace) => 
+                        const Icon(Icons.g_mobiledata, size: 28, color: Colors.blue),
+                    ),
+                    label: const Text('Continue with Google', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                ),
+                const SizedBox(height: 16),
               ],
             ),
-          ),
-        );
+          );
       },
     );
   }
@@ -368,6 +395,7 @@ class _LoginFormState extends State<_LoginForm> {
 
 class _SignupForm extends StatefulWidget {
   const _SignupForm({
+    super.key,
     required this.authService,
     required this.initialRole,
     required this.onEnter,
@@ -390,9 +418,12 @@ class _SignupFormState extends State<_SignupForm> {
   final _employeeIdController = TextEditingController();
   final _phoneController = TextEditingController();
   late UserRole _selectedRole;
-  Designation _designation = Designation.lecturer;
-  bool _hidePassword = true;
-  bool _hideConfirm = true;
+  Designation? _selectedDesignation;
+  
+  // Custom error texts for Google Sign-In validation (only for required fields)
+  String? _nameError;
+  String? _departmentError;
+  String? _designationError;
 
   @override
   void dispose() {
@@ -427,7 +458,6 @@ class _SignupFormState extends State<_SignupForm> {
         department: _selectedRole == UserRole.teacher ? _departmentController.text.trim() : null,
         employeeId: _selectedRole == UserRole.teacher ? _employeeIdController.text.trim() : null,
         phoneNumber: _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
-        designation: _selectedRole == UserRole.teacher ? _designation : null,
       );
 
       if (success && mounted) {
@@ -446,30 +476,24 @@ class _SignupFormState extends State<_SignupForm> {
         // Show success message based on role
         String message;
         if (_selectedRole == UserRole.teacher) {
-          message = 'Teacher account created! Your account is pending admin approval. Please contact an administrator.';
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(message),
-              backgroundColor: Colors.orange,
-              duration: const Duration(seconds: 5),
-            ),
-          );
-          // Don't call onEnter for teachers - they need admin approval
+          message = 'Teacher account created! Your account is pending admin approval. Welcome $userName';
         } else {
           message = 'Account created successfully! Welcome $userName';
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(message),
-              backgroundColor: Theme.of(context).colorScheme.primary,
-            ),
-          );
-          // Only call onEnter for students who can immediately access the app
-          widget.onEnter(_selectedRole);
         }
-      } else if (mounted) {
+        
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(widget.authService.errorMessage ?? 'Signup failed. Please try again.'),
+            content: Text(message),
+            backgroundColor: Theme.of(context).colorScheme.primary,
+          ),
+        );
+        
+        widget.onEnter(_selectedRole);
+      } else if (mounted) {
+        final errorText = widget.authService.errorMessage ?? 'Signup failed. Please try again.';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorText),
             backgroundColor: Theme.of(context).colorScheme.error,
           ),
         );
@@ -486,27 +510,108 @@ class _SignupFormState extends State<_SignupForm> {
     }
   }
 
+  Future<void> _handleGoogleSignIn() async {
+    try {
+      // For teachers, validate only the essential fields for Google Sign-In
+      if (_selectedRole == UserRole.teacher) {
+        // Clear previous errors and check required fields
+        bool hasErrors = false;
+        String? nameErr;
+        String? deptErr;
+        String? desigErr;
+        
+        if (_nameController.text.trim().isEmpty) {
+          hasErrors = true;
+          nameErr = 'Please enter your full name';
+        }
+        if (_departmentController.text.trim().isEmpty) {
+          hasErrors = true;
+          deptErr = 'Please enter your department';
+        }
+        if (_selectedDesignation == null) {
+          hasErrors = true;
+          desigErr = 'Please select your designation';
+        }
+        
+        if (hasErrors) {
+          // Set custom errors only for the 3 required fields
+          setState(() {
+            _nameError = nameErr;
+            _departmentError = deptErr;
+            _designationError = desigErr;
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('Please complete required fields above'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+              duration: const Duration(seconds: 2),
+            ),
+          );
+          return;
+        }
+        
+        // Clear errors if validation passes
+        setState(() {
+          _nameError = null;
+          _departmentError = null;
+          _designationError = null;
+        });
+      }
+      
+      final success = await widget.authService.signInWithGoogle(
+        _selectedRole,
+        isSignup: true, // Signup flow - allow account creation
+        name: _selectedRole == UserRole.teacher ? _nameController.text.trim() : null,
+        department: _selectedRole == UserRole.teacher ? _departmentController.text.trim() : null,
+        employeeId: _selectedRole == UserRole.teacher && _employeeIdController.text.trim().isNotEmpty 
+            ? _employeeIdController.text.trim() 
+            : null, // Optional for Google Sign-In
+        designation: _selectedRole == UserRole.teacher ? _selectedDesignation : null,
+        phoneNumber: _phoneController.text.trim().isNotEmpty ? _phoneController.text.trim() : null,
+      );
+      
+      if (success && mounted) {
+        debugPrint('Google Sign In successful, calling onEnter');
+        widget.onEnter(_selectedRole);
+      } else if (mounted) {
+        final errorMessage = widget.authService.errorMessage ?? 'Google Sign In failed';
+         if (errorMessage.contains('approval')) {
+             // Teacher pending approval specific handling usually just a snackbar
+        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(errorMessage),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: widget.authService,
       builder: (context, child) {
-        return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-          child: Form(
-            key: _formKey,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: <Widget>[
-                // Role selection (Student or Teacher only)
-                DropdownButtonFormField<UserRole>(
-                  value: _selectedRole,
+        return Form(
+          key: _formKey,
+          child: Column(
+            children: <Widget>[
+              const SizedBox(height: 16),
+              // Role selection (Student or Teacher only)
+              DropdownButtonFormField<UserRole>(
+                value: _selectedRole,
                   decoration: const InputDecoration(
                     labelText: 'Role',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person, size: 20),
-                    filled: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    prefixIcon: Icon(Icons.person),
                   ),
                   items: const <DropdownMenuItem<UserRole>>[
                     DropdownMenuItem(value: UserRole.student, child: Text('Student')),
@@ -516,18 +621,22 @@ class _SignupFormState extends State<_SignupForm> {
                     if (role != null) setState(() => _selectedRole = role);
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Full Name',
                     hintText: 'Enter your first and last name',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.person_outline, size: 20),
-                    filled: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    border: const OutlineInputBorder(),
+                    prefixIcon: const Icon(Icons.person_outline),
+                    errorText: _nameError,
                   ),
                   textCapitalization: TextCapitalization.words,
+                  onChanged: (_) {
+                    if (_nameError != null) {
+                      setState(() => _nameError = null);
+                    }
+                  },
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Please enter your full name';
@@ -538,36 +647,57 @@ class _SignupFormState extends State<_SignupForm> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 // Teacher-specific fields
                 if (_selectedRole == UserRole.teacher) ...[
                   TextFormField(
                     controller: _departmentController,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       labelText: 'Department',
                       hintText: 'e.g., Computer Science, Engineering',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.business, size: 20),
-                      filled: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.business),
+                      errorText: _departmentError,
                     ),
                     textCapitalization: TextCapitalization.words,
+                    onChanged: (_) {
+                      if (_departmentError != null) {
+                        setState(() => _departmentError = null);
+                      }
+                    },
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
+                      if (_selectedRole == UserRole.teacher && (value == null || value.trim().isEmpty)) {
                         return 'Please enter your department';
+                      }
+                      if (_selectedRole == UserRole.teacher && _departmentController.text.trim().isEmpty) {
+                        return 'Department required for teachers';
                       }
                       return null;
                     },
                   ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<Designation>(
-                    value: _designation,
+                  const SizedBox(height: 16),
+                  TextFormField(
+                    controller: _employeeIdController,
                     decoration: const InputDecoration(
-                      labelText: 'Designation',
+                      labelText: 'Employee ID',
+                      hintText: 'Enter your employee ID',
                       border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.work, size: 20),
-                      filled: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                      prefixIcon: Icon(Icons.badge),
+                    ),
+                    validator: (value) {
+                      if (_selectedRole == UserRole.teacher && (value == null || value.isEmpty)) {
+                        return 'Please enter your employee ID';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  DropdownButtonFormField<Designation>(
+                    decoration: InputDecoration(
+                      labelText: 'Designation',
+                      border: const OutlineInputBorder(),
+                      prefixIcon: const Icon(Icons.workspace_premium),
+                      errorText: _designationError,
                     ),
                     items: Designation.values.map((designation) {
                       return DropdownMenuItem(
@@ -575,33 +705,22 @@ class _SignupFormState extends State<_SignupForm> {
                         child: Text(designation.displayName),
                       );
                     }).toList(),
-                    onChanged: (Designation? newValue) {
-                      if (newValue != null) {
-                        setState(() {
-                          _designation = newValue;
-                        });
-                      }
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  TextFormField(
-                    controller: _employeeIdController,
-                    decoration: const InputDecoration(
-                      labelText: 'Employee ID',
-                      hintText: 'Enter your employee ID',
-                      border: OutlineInputBorder(),
-                      prefixIcon: Icon(Icons.badge, size: 20),
-                      filled: true,
-                      contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                    ),
                     validator: (value) {
-                      if (value == null || value.isEmpty) {
-                        return 'Please enter your employee ID';
+                      if (_selectedRole == UserRole.teacher && value == null) {
+                        return 'Please select your designation';
                       }
                       return null;
                     },
+                    onChanged: (Designation? value) {
+                      setState(() {
+                        _selectedDesignation = value;
+                        if (_designationError != null) {
+                          _designationError = null;
+                        }
+                      });
+                    },
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 16),
                 ],
                 // Phone number (optional for all)
                 TextFormField(
@@ -611,12 +730,10 @@ class _SignupFormState extends State<_SignupForm> {
                     labelText: 'Phone Number (Optional)',
                     hintText: 'Enter your phone number',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.phone, size: 20),
-                    filled: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    prefixIcon: Icon(Icons.phone),
                   ),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
@@ -624,9 +741,7 @@ class _SignupFormState extends State<_SignupForm> {
                     labelText: 'Email',
                     hintText: 'Enter your email address',
                     border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.email, size: 20),
-                    filled: true,
-                    contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                    prefixIcon: Icon(Icons.email),
                   ),
                   autofillHints: const [AutofillHints.email],
                   validator: (value) {
@@ -639,21 +754,15 @@ class _SignupFormState extends State<_SignupForm> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordController,
-                  obscureText: _hidePassword,
-                  decoration: InputDecoration(
+                  obscureText: true,
+                  decoration: const InputDecoration(
                     labelText: 'Password',
                     hintText: 'Enter a secure password',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.lock, size: 20),
-                    filled: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                    suffixIcon: IconButton(
-                      icon: Icon(_hidePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
-                      onPressed: () => setState(() => _hidePassword = !_hidePassword),
-                    ),
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock),
                   ),
                   autofillHints: const [AutofillHints.newPassword],
                   validator: (value) {
@@ -669,21 +778,15 @@ class _SignupFormState extends State<_SignupForm> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 TextFormField(
                   controller: _confirmPasswordController,
-                  obscureText: _hideConfirm,
-                  decoration: InputDecoration(
+                  obscureText: true,
+                  decoration: const InputDecoration(
                     labelText: 'Confirm Password',
                     hintText: 'Re-enter your password',
-                    border: const OutlineInputBorder(),
-                    prefixIcon: const Icon(Icons.lock_outline, size: 20),
-                    filled: true,
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
-                    suffixIcon: IconButton(
-                      icon: Icon(_hideConfirm ? Icons.visibility_outlined : Icons.visibility_off_outlined, size: 20),
-                      onPressed: () => setState(() => _hideConfirm = !_hideConfirm),
-                    ),
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.lock_outline),
                   ),
                   autofillHints: const [AutofillHints.newPassword],
                   validator: (value) {
@@ -696,13 +799,13 @@ class _SignupFormState extends State<_SignupForm> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 24),
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
                     onPressed: widget.authService.isLoading ? null : _handleSignup,
                     style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      padding: const EdgeInsets.symmetric(vertical: 16),
                     ),
                     child: widget.authService.isLoading
                         ? const SizedBox(
@@ -715,14 +818,46 @@ class _SignupFormState extends State<_SignupForm> {
                           )
                         : const Text(
                             'Create Account',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
                           ),
                   ),
                 ),
+                const SizedBox(height: 24),
+                Row(
+                  children: [
+                    Expanded(child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text('OR', style: Theme.of(context).textTheme.bodySmall),
+                    ),
+                    Expanded(child: Divider(color: Theme.of(context).colorScheme.outlineVariant)),
+                  ],
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: widget.authService.isLoading ? null : _handleGoogleSignIn,
+                    style: OutlinedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      side: const BorderSide(color: Colors.grey),
+                    ),
+                    icon: Image.network(
+                      'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/768px-Google_%22G%22_logo.svg.png',
+                      height: 24,
+                      width: 24,
+                      errorBuilder: (context, error, stackTrace) => 
+                        const Icon(Icons.g_mobiledata, size: 28, color: Colors.blue),
+                    ),
+                    label: const Text('Sign up with Google', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                  ),
+                ),
+                const SizedBox(height: 16),
               ],
             ),
-          ),
-        );
+          );
       },
     );
   }

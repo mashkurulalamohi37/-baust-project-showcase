@@ -113,8 +113,8 @@
       font-size: 16px;
     }
 
-    /* iOS Install Banner */
-    #ios-install-banner {
+    /* Install Banner */
+    #install-banner {
       position: fixed;
       bottom: 0;
       left: 0;
@@ -139,7 +139,7 @@
       }
     }
 
-    #ios-install-banner.show {
+    #install-banner.show {
       display: block;
     }
 
@@ -252,8 +252,8 @@
     <div class="loading-text">Loading BAUST Projects...</div>
   </div>
 
-  <!-- iOS Install Banner -->
-  <div id="ios-install-banner">
+  <!-- Install Banner -->
+  <div id="install-banner">
     <div class="install-content">
       <div class="install-header">
         <img src="icons/Icon-192.png" alt="App Icon" class="install-icon">
@@ -262,27 +262,41 @@
           <p class="install-subtitle">Get the full app experience</p>
         </div>
       </div>
-      <div class="install-instructions">
-        <div class="install-step">
-          <span class="install-step-icon">1️⃣</span>
-          <span>Tap the <strong>Share</strong> button <svg width="16" height="16" viewBox="0 0 24 24"
-              fill="currentColor">
-              <path
-                d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.11 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z" />
-            </svg> in Safari</span>
-        </div>
-        <div class="install-step">
-          <span class="install-step-icon">2️⃣</span>
-          <span>Select <strong>"Add to Home Screen"</strong></span>
-        </div>
-        <div class="install-step">
-          <span class="install-step-icon">3️⃣</span>
-          <span>Tap <strong>"Add"</strong> to install</span>
+
+      <!-- iOS Instructions -->
+      <div id="ios-instructions" style="display: none;">
+        <div class="install-instructions">
+          <div class="install-step">
+            <span class="install-step-icon">1️⃣</span>
+            <span>Tap the <strong>Share</strong> button <svg width="16" height="16" viewBox="0 0 24 24"
+                fill="currentColor">
+                <path
+                  d="M16 5l-1.42 1.42-1.59-1.59V16h-1.98V4.83L9.42 6.42 8 5l4-4 4 4zm4 5v11c0 1.1-.9 2-2 2H6c-1.11 0-2-.9-2-2V10c0-1.11.89-2 2-2h3v2H6v11h12V10h-3V8h3c1.1 0 2 .89 2 2z" />
+              </svg> in Safari</span>
+          </div>
+          <div class="install-step">
+            <span class="install-step-icon">2️⃣</span>
+            <span>Select <strong>"Add to Home Screen"</strong></span>
+          </div>
+          <div class="install-step">
+            <span class="install-step-icon">3️⃣</span>
+            <span>Tap <strong>"Add"</strong> to install</span>
+          </div>
         </div>
       </div>
+
+      <!-- Android/Generic Message -->
+      <div id="android-instructions" style="display: none;">
+        <div class="install-instructions">
+          <p style="margin: 0;">Install this application on your home screen for quick and easy access when you're on
+            the go.</p>
+        </div>
+      </div>
+
       <div class="install-buttons">
-        <button class="install-btn install-btn-primary" onclick="dismissInstallBanner()">Got it!</button>
-        <button class="install-btn install-btn-secondary" onclick="remindLater()">Remind me later</button>
+        <button id="install-button" class="install-btn install-btn-primary" onclick="handleInstallClick()">Got
+          it!</button>
+        <button class="install-btn install-btn-secondary" onclick="dismissInstallBanner()">Remind me later</button>
       </div>
     </div>
   </div>
@@ -304,11 +318,11 @@
         window.matchMedia('(display-mode: standalone)').matches;
     }
 
-    // Show iOS install banner
-    function showIOSInstallBanner() {
-      const banner = document.getElementById('ios-install-banner');
-      const dismissed = localStorage.getItem('ios-install-dismissed');
-      const remindLaterTime = localStorage.getItem('ios-install-remind-later');
+    // Show Install Banner
+    function showInstallBanner() {
+      const banner = document.getElementById('install-banner');
+      const dismissed = localStorage.getItem('install-dismissed');
+      const remindLaterTime = localStorage.getItem('install-remind-later');
 
       if (dismissed === 'true') return;
 
@@ -318,24 +332,57 @@
         if (now < reminderTime) return;
       }
 
+      // iOS Logic
       if (isIOS() && !isInStandaloneMode()) {
-        setTimeout(() => {
-          banner.classList.add('show');
-        }, 3000); // Show after 3 seconds
+        document.getElementById('ios-instructions').style.display = 'block';
+        document.getElementById('android-instructions').style.display = 'none';
+        document.getElementById('install-button').innerText = 'Got it!';
+        setTimeout(() => banner.classList.add('show'), 3000);
+      }
+
+      // Android/Desktop PWA Logic
+      if (deferredPrompt) {
+        document.getElementById('ios-instructions').style.display = 'none';
+        document.getElementById('android-instructions').style.display = 'block';
+        document.getElementById('install-button').innerText = 'Install';
+        setTimeout(() => banner.classList.add('show'), 3000);
       }
     }
 
-    function dismissInstallBanner() {
-      const banner = document.getElementById('ios-install-banner');
+    function handleInstallClick() {
+      if (deferredPrompt) {
+        // Show the native prompt
+        deferredPrompt.prompt();
+        // Wait for the user to respond to the prompt
+        deferredPrompt.userChoice.then((choiceResult) => {
+          if (choiceResult.outcome === 'accepted') {
+            console.log('User accepted the install prompt');
+            localStorage.setItem('install-dismissed', 'true');
+          } else {
+            console.log('User dismissed the install prompt');
+          }
+          deferredPrompt = null;
+          dismissInstallBanner();
+        });
+      } else {
+        // iOS or just closing
+        dismissInstallBanner(true); // Persist dismissal for iOS 'Got it'
+      }
+    }
+
+    function dismissInstallBanner(persist = false) {
+      const banner = document.getElementById('install-banner');
       banner.classList.remove('show');
-      localStorage.setItem('ios-install-dismissed', 'true');
+      if (persist) {
+        localStorage.setItem('install-dismissed', 'true');
+      }
     }
 
     function remindLater() {
-      const banner = document.getElementById('ios-install-banner');
+      const banner = document.getElementById('install-banner');
       banner.classList.remove('show');
       const threeDaysFromNow = new Date().getTime() + (3 * 24 * 60 * 60 * 1000);
-      localStorage.setItem('ios-install-remind-later', threeDaysFromNow.toString());
+      localStorage.setItem('install-remind-later', threeDaysFromNow.toString());
     }
 
     // Service Worker Registration
@@ -367,18 +414,17 @@
       }
     }, 5000);
 
-    // Show install banner
-    showIOSInstallBanner();
-
     // Android Install Prompt
     let deferredPrompt;
     window.addEventListener('beforeinstallprompt', (e) => {
       e.preventDefault();
       deferredPrompt = e;
-
-      // You can show your own install button here
-      console.log('Install prompt available');
+      showInstallBanner();
+      console.log('Install prompt captured');
     });
+
+    // Try to show banner for iOS (deferredPrompt won't fire)
+    setTimeout(showInstallBanner, 1000);
 
     // Track installation
     window.addEventListener('appinstalled', () => {

@@ -5,9 +5,9 @@ import '../mvc/controllers/project_service.dart';
 import '../mvc/controllers/auth_service.dart';
 import 'project_detail.dart';
 import 'semester_archive_new.dart';
-import '../mvc/views/profile_settings_screen.dart';
+import 'profile_settings_screen.dart';
 import '../mvc/controllers/notification_service.dart';
-import '../mvc/views/notifications_screen.dart';
+import 'notifications_screen.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});

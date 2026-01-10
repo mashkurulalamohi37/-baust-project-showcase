@@ -9,9 +9,9 @@ import '../mvc/controllers/auth_service.dart';
 import 'project_detail.dart';
 import 'search_filter.dart';
 import 'semester_archive_new.dart';
-import '../mvc/views/profile_settings_screen.dart';
+import 'profile_settings_screen.dart';
 import '../mvc/controllers/notification_service.dart';
-import '../mvc/views/notifications_screen.dart';
+import 'notifications_screen.dart';
 
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
@@ -2335,7 +2335,7 @@ class _ProjectCard extends StatelessWidget {
       case ProjectStatus.rejected:
         return Colors.red;
       case ProjectStatus.featured:
-        return Colors.purple;
+        return Colors.amber[700]!;
       case ProjectStatus.needsRevision:
         return Colors.amber;
       case ProjectStatus.resubmitted:
