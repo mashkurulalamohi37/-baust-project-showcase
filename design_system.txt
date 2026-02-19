@@ -1,0 +1,49 @@
+﻿python : Traceback 
+(most recent call 
+last):
+At line:1 char:1
++ python .agent/.shar
+ed/ui-ux-pro-max/scri
+pts/search.py 
+"academic proje ...
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (Traceba   
+ ck (most recent     
+call last)::Stri    
+ng) [], RemoteEx    
+ception
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 
+  File "D:\projectSho
+wcase\.agent\.shared\
+ui-ux-pro-max\scripts
+\search.py", line 
+76, in <module>
+    print(result)
+    ~~~~~^^^^^^^^
+  File "C:\Python313\
+Lib\encodings\cp1252.
+py", line 19, in 
+encode
+    return codecs.cha
+rmap_encode(input,sel
+f.errors,encoding_tab
+le)[0]
+           ~~~~~~~~~~
+~~~~~~~~~~~^^^^^^^^^^
+^^^^^^^^^^^^^^^^^^^^^
+^^^
+UnicodeEncodeError: 
+'charmap' codec 
+can't encode 
+character '\u26a0' 
+in position 689: 
+character maps to 
+<undefined>

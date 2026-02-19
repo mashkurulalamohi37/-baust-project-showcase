@@ -1,0 +1,47 @@
+﻿Analyzing student_dashboard.dart...                             
+
+warning - Unused import: 'search_filter.dart' - lib\screens\student_dashboard.dart:10:8 - unused_import
+   info - Don't use 'BuildContext's across async gaps, guarded by an unrelated 'mounted' check - lib\screens\student_dashboard.dart:107:34 - use_build_context_synchronously
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:256:85 - deprecated_member_use
+   info - Function literals shouldn't be passed to 'forEach' - lib\screens\student_dashboard.dart:522:26 - avoid_function_literals_in_foreach_calls
+warning - The operand can't be 'null', so the condition is always 'false' - lib\screens\student_dashboard.dart:577:27 - unnecessary_null_comparison
+   info - Use interpolation to compose strings and values - lib\screens\student_dashboard.dart:841:26 - prefer_interpolation_to_compose_strings
+   info - Function literals shouldn't be passed to 'forEach' - lib\screens\student_dashboard.dart:873:26 - avoid_function_literals_in_foreach_calls
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:991:83 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:1243:88 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:1301:88 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:2040:78 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:2123:77 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:2214:62 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:2216:81 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:2258:43 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:2290:50 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:2293:52 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:2318:39 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:2321:41 - deprecated_member_use
+   info - Unnecessary use of string interpolation - lib\screens\student_dashboard.dart:2370:25 - unnecessary_string_interpolations
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:2379:51 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:2391:49 - deprecated_member_use
+   info - 'withOpacity' is deprecated and shouldn't be used. Use .withValues() to avoid precision loss - lib\screens\student_dashboard.dart:2404:83 - deprecated_member_use
+
+flutter : 23 issues 
+found. (ran in 6.1s)
+At line:1 char:1
++ flutter analyze lib
+/screens/student_dash
+board.dart 2>&1 | 
+Out-File -E ...
++ ~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~~~~~~~~
+    + CategoryInfo   
+           : NotSpe  
+  cified: (23 issu   
+ es found. (ran i    
+n 6.1s):String)     
+[], RemoteExcept    
+ion
+    + FullyQualified 
+   ErrorId : Native  
+  CommandError
+ 

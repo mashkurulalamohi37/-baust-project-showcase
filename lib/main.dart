@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'dart:ui';
 import 'theme.dart';
 import 'screens/auth.dart';
 import 'screens/search_filter.dart';
@@ -23,6 +24,15 @@ import 'package:firebase_storage/firebase_storage.dart' as storage;
 
 // Global AuthService instance
 final AuthService globalAuthService = AuthService();
+
+class CustomScrollBehavior extends MaterialScrollBehavior {
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+        PointerDeviceKind.touch,
+        PointerDeviceKind.mouse,
+        PointerDeviceKind.trackpad,
+      };
+}
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -114,6 +124,7 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'projectshow',
+      scrollBehavior: CustomScrollBehavior(),
       theme: buildLightTheme(),
       darkTheme: buildDarkTheme(),
       themeMode: ThemeMode.system,
@@ -849,8 +860,9 @@ class _UploadScreenState extends State<UploadScreen> {
                     if (value == null || value.trim().isEmpty) {
                       return 'Please enter an abstract';
                     }
-                    if (value.trim().length < 50) {
-                      return 'Abstract must be at least 50 characters';
+                    final wordCount = value.trim().split(RegExp(r'\s+')).where((word) => word.isNotEmpty).length;
+                    if (wordCount > 50) {
+                      return 'Abstract cannot exceed 50 words (currently $wordCount words)';
                     }
                     return null;
                   },

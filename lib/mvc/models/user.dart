@@ -19,6 +19,12 @@ class User {
   final bool isActive; // Account status
   final Designation? designation; // Designation for teachers
   final bool notificationsEnabled; // Notification preferences
+  final String? bio; // Student portfolio bio
+  final List<String>? skills; // Student skills
+  final String? linkedinUrl; // LinkedIn profile
+  final String? githubUrl; // GitHub profile
+  final List<String>? pinnedProjectIds; // IDs of projects to highlight
+  final bool isPublicProfile; // Whether the profile is visible to others
 
   const User({
     required this.id,
@@ -41,6 +47,12 @@ class User {
     this.isActive = true,
     this.designation,
     this.notificationsEnabled = true, // Notifications enabled by default
+    this.bio,
+    this.skills,
+    this.linkedinUrl,
+    this.githubUrl,
+    this.pinnedProjectIds,
+    this.isPublicProfile = false,
   });
 
   factory User.fromJson(Map<String, dynamic> json) {
@@ -74,6 +86,12 @@ class User {
             )
           : (json['role'] == 'teacher' ? Designation.lecturer : null),
       notificationsEnabled: json['notificationsEnabled'] as bool? ?? true,
+      bio: json['bio'] as String?,
+      skills: (json['skills'] as List<dynamic>?)?.map((e) => e as String).toList(),
+      linkedinUrl: json['linkedinUrl'] as String?,
+      githubUrl: json['githubUrl'] as String?,
+      pinnedProjectIds: (json['pinnedProjectIds'] as List<dynamic>?)?.map((e) => e as String).toList(),
+      isPublicProfile: json['isPublicProfile'] as bool? ?? false,
     );
   }
 
@@ -99,6 +117,12 @@ class User {
       'isActive': isActive,
       'designation': designation?.name,
       'notificationsEnabled': notificationsEnabled,
+      'bio': bio,
+      'skills': skills,
+      'linkedinUrl': linkedinUrl,
+      'githubUrl': githubUrl,
+      'pinnedProjectIds': pinnedProjectIds,
+      'isPublicProfile': isPublicProfile,
     };
   }
 
@@ -123,6 +147,12 @@ class User {
     bool? isActive,
     Designation? designation,
     bool? notificationsEnabled,
+    String? bio,
+    List<String>? skills,
+    String? linkedinUrl,
+    String? githubUrl,
+    List<String>? pinnedProjectIds,
+    bool? isPublicProfile,
   }) {
     return User(
       id: id ?? this.id,
@@ -145,6 +175,12 @@ class User {
       isActive: isActive ?? this.isActive,
       designation: designation ?? this.designation,
       notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
+      bio: bio ?? this.bio,
+      skills: skills ?? this.skills,
+      linkedinUrl: linkedinUrl ?? this.linkedinUrl,
+      githubUrl: githubUrl ?? this.githubUrl,
+      pinnedProjectIds: pinnedProjectIds ?? this.pinnedProjectIds,
+      isPublicProfile: isPublicProfile ?? this.isPublicProfile,
     );
   }
 

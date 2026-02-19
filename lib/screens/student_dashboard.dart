@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
+import 'dart:typed_data';
 import 'package:file_picker/file_picker.dart';
 import '../mvc/models/project.dart';
 import '../mvc/models/user.dart';
@@ -12,9 +14,17 @@ import 'semester_archive_new.dart';
 import 'profile_settings_screen.dart';
 import '../mvc/controllers/notification_service.dart';
 import 'notifications_screen.dart';
+import '../utils/responsive_layout.dart';
+import '../widgets/web_notification_panel.dart';
+import '../services/announcement_service.dart';
+import '../models/announcement.dart';
+import 'package:intl/intl.dart';
 
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import 'package:http/http.dart' as http;
+
+import '../widgets/announcement_carousel.dart';
 
 class StudentDashboardScreen extends StatefulWidget {
   const StudentDashboardScreen({super.key});
@@ -27,6 +37,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   final ProjectService _projectService = ProjectService();
   final AuthService _authService = AuthService();
   final NotificationService _notificationService = NotificationService();
+  final AnnouncementService _announcementService = AnnouncementService();
   int _selectedIndex = 0;
   DateTime? _lastPressedAt;
 
@@ -35,6 +46,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
     super.initState();
     _projectService.reloadProjects();
     _loadNotifications();
+    _announcementService.loadAnnouncements();
   }
 
   void _loadNotifications() {
@@ -69,33 +81,61 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
             await SystemNavigator.pop();
           }
         },
-        child: Scaffold(
-        appBar: AppBar(
+        child: ResponsiveDashboardLayout(
           title: const Text('Student Dashboard'),
-          backgroundColor: Theme.of(context).colorScheme.primaryContainer,
-          foregroundColor: Theme.of(context).colorScheme.onPrimaryContainer,
+          selectedIndex: _selectedIndex,
+          onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
+          userEmail: _authService.currentUser?.email,
+          userRole: _authService.currentUser?.role.name.toUpperCase(),
+          onLogout: () async {
+            await _authService.logout();
+            if (mounted) {
+              Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+            }
+          },
           actions: [
             IconButton(
               onPressed: () => Navigator.pushNamed(context, '/search'),
               icon: const Icon(Icons.search),
               tooltip: 'Search Projects',
             ),
-            AnimatedBuilder(
-              animation: _notificationService,
-              builder: (context, _) {
-                return Badge(
-                  label: Text('${_notificationService.unreadCount}'),
-                  isLabelVisible: _notificationService.unreadCount > 0,
-                  child: IconButton(
-                    icon: const Icon(Icons.notifications),
-                    onPressed: () {
-                      Navigator.of(context).push(
-                        MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+            // Notification Icon
+            LayoutBuilder(
+              builder: (context, constraints) {
+                 // Check screen width for responsive behavior
+                 final isDesktop = MediaQuery.of(context).size.width >= 900;
+                 
+                 if (isDesktop) {
+                   return WebNotificationPanel(
+                     notificationService: _notificationService,
+                     onViewAll: () {
+                        // Close dropdown relies on internal logic, but here we navigate
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                        );
+                     },
+                   );
+                 } else {
+                   return AnimatedBuilder(
+                    animation: _notificationService,
+                    builder: (context, _) {
+                      return Badge(
+                        label: Text('${_notificationService.unreadCount}'),
+                        isLabelVisible: _notificationService.unreadCount > 0,
+                        child: IconButton(
+                          icon: const Icon(Icons.notifications),
+                          onPressed: () {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                            );
+                          },
+                          tooltip: 'Notifications',
+                        ),
                       );
                     },
-                  ),
-                );
-              },
+                   );
+                 }
+              }
             ),
             PopupMenuButton<String>(
               onSelected: (String value) async {
@@ -135,29 +175,6 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
               ],
             ),
           ],
-        ),
-        body: AnimatedBuilder(
-          animation: _projectService,
-          builder: (context, child) {
-            if (_projectService.isLoading) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            return IndexedStack(
-              index: _selectedIndex,
-              children: [
-                _ExploreTab(projectService: _projectService, authService: _authService),
-                _UploadTab(projectService: _projectService, authService: _authService),
-                _MyProjectsTab(projectService: _projectService, authService: _authService),
-                _BookmarksTab(projectService: _projectService, authService: _authService),
-                const SemesterArchiveScreen(),
-              ],
-            );
-          },
-        ),
-        bottomNavigationBar: NavigationBar(
-          selectedIndex: _selectedIndex,
-          onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
           destinations: const [
             NavigationDestination(
               icon: Icon(Icons.explore_outlined),
@@ -185,23 +202,74 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
               label: 'Archives',
             ),
           ],
+          body: AnimatedBuilder(
+            animation: _projectService,
+            builder: (context, child) {
+              if (_projectService.isLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
+
+              return IndexedStack(
+                index: _selectedIndex,
+                children: [
+                  _ExploreTab(
+                    projectService: _projectService, 
+                    authService: _authService,
+                    announcementService: _announcementService,
+                  ),
+                  _UploadTab(projectService: _projectService, authService: _authService),
+                  _MyProjectsTab(projectService: _projectService, authService: _authService),
+                  _BookmarksTab(projectService: _projectService, authService: _authService),
+                  const SemesterArchiveScreen(),
+                ],
+              );
+            },
+          ),
         ),
-      ),
       ),
     );
   }
 }
 
 class _ExploreTab extends StatelessWidget {
-  const _ExploreTab({required this.projectService, required this.authService});
+  const _ExploreTab({
+    required this.projectService, 
+    required this.authService,
+    required this.announcementService,
+  });
   final ProjectService projectService;
   final AuthService authService;
+  final AnnouncementService announcementService;
 
   @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Announcements Section
+        AnimatedBuilder(
+          animation: announcementService,
+          builder: (context, _) {
+            final activeAnnouncements = announcementService.getActiveAnnouncementsStream();
+            return StreamBuilder<List<Announcement>>(
+              stream: activeAnnouncements,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
+                
+                return Center(
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 1200),
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 24),
+                      child: AnnouncementCarousel(announcements: snapshot.data!),
+                    ),
+                  ),
+                );
+              },
+            );
+          },
+        ),
+
         // Welcome Section
         Card(
           color: Theme.of(context).colorScheme.primaryContainer,
@@ -323,6 +391,8 @@ class _ExploreTab extends StatelessWidget {
       ),
     );
   }
+
+
 }
 
 class _UploadTab extends StatefulWidget {
@@ -340,8 +410,13 @@ class _UploadTabState extends State<_UploadTab> {
   final _abstractController = TextEditingController();
   final _yearController = TextEditingController();
   final _githubController = TextEditingController();
+  final _customCategoryController = TextEditingController(); // New controller for custom category
   final List<String> _selectedImagePaths = <String>[];
   String? _selectedPdfPath;
+  // Byte data for Web support
+  Uint8List? _selectedPdfBytes;
+  List<Uint8List> _selectedImageBytes = [];
+  
   List<User> _approvedTeachers = [];
   String? _selectedTeacherId; // No default - must select a teacher for approval
   String? _selectedSupervisorId; // Supervisor selection (optional, can be same as approver)
@@ -400,6 +475,7 @@ class _UploadTabState extends State<_UploadTab> {
     _yearController.dispose();
     _yearController.dispose();
     _githubController.dispose();
+    _customCategoryController.dispose();
     _groupNameController.dispose();
     _studentIdController.dispose();
     _batchController.dispose();
@@ -417,7 +493,9 @@ class _UploadTabState extends State<_UploadTab> {
     setState(() => _isLoadingTeachers = true);
     try {
       final teachers = await widget.authService.getUsersByRole(UserRole.teacher);
-      final approved = teachers.where((teacher) => teacher.isApproved).toList()
+      final approved = teachers.where((teacher) => 
+        teacher.isApproved && teacher.id != widget.authService.currentUser?.id
+      ).toList()
         ..sort((a, b) => a.name.compareTo(b.name));
       if (mounted) {
         setState(() {
@@ -472,6 +550,50 @@ class _UploadTabState extends State<_UploadTab> {
         setState(() => _isSubmitting = false);
         return;
       }
+
+      // Critical Safeguard: Prevent student from selecting themselves as approving teacher
+      if (selectedTeacher.id == widget.authService.currentUser?.id) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('You cannot assign yourself as the approving teacher.'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+        setState(() => _isSubmitting = false);
+        return;
+      }
+
+      // Safeguard: Check supervisor selection
+      if (_selectedSupervisorId != null && _selectedSupervisorId == widget.authService.currentUser?.id) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('You cannot assign yourself as the supervisor.'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+        setState(() => _isSubmitting = false);
+        return;
+      }
+
+      // Safeguard: Check assistant teacher selection
+      if (_submissionType == ProjectSubmissionType.academic && 
+          _selectedAssistantTeacherId != null && 
+          _selectedAssistantTeacherId == widget.authService.currentUser?.id) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text('You cannot assign yourself as the assistant teacher.'),
+              backgroundColor: Theme.of(context).colorScheme.error,
+            ),
+          );
+        }
+        setState(() => _isSubmitting = false);
+        return;
+      }
       
       // Get supervisor name - use selected supervisor if provided, otherwise use approving teacher
       final supervisorTeacher = _selectedSupervisorId != null
@@ -501,7 +623,37 @@ class _UploadTabState extends State<_UploadTab> {
           );
         }
         setState(() => _isSubmitting = false);
+        setState(() => _isSubmitting = false);
         return;
+      }
+
+      // Validate GitHub URL for Public Access
+      if (_githubController.text.trim().isNotEmpty) {
+        final githubUrl = _githubController.text.trim();
+        // Check only if it looks like a valid GitHub URL
+        if (githubUrl.contains('github.com')) {
+           // Show temporary feedback while checking
+           if (mounted) {
+             ScaffoldMessenger.of(context).showSnackBar(
+               const SnackBar(content: Text('Verifying GitHub repository access...'), duration: Duration(milliseconds: 1000)),
+             );
+           }
+           
+           final isPublic = await _isGitHubRepoPublic(githubUrl);
+           if (!isPublic) {
+             if (mounted) {
+               ScaffoldMessenger.of(context).showSnackBar(
+                 const SnackBar(
+                   content: Text('GitHub repository is Private or Not Found. Please make it Public to submit.'),
+                   backgroundColor: Colors.red,
+                   duration: Duration(seconds: 5),
+                 ),
+               );
+             }
+             setState(() => _isSubmitting = false);
+             return;
+           }
+        }
       }
 
       final project = Project(
@@ -511,6 +663,7 @@ class _UploadTabState extends State<_UploadTab> {
         authorId: widget.authService.currentUser!.id,
         authorName: widget.authService.currentUser!.name,
         category: _selectedCategory,
+        customCategory: _selectedCategory == ProjectCategory.other ? _customCategoryController.text.trim() : null,
         year: int.tryParse(_yearController.text) ?? DateTime.now().year,
         semester: _selectedSemester,
         createdAt: DateTime.now(),
@@ -573,7 +726,7 @@ class _UploadTabState extends State<_UploadTab> {
         // Add timeout to prevent infinite loading
         success = await Future.any([
           _submitProjectWithProgress(project, uploadStatusController),
-          Future.delayed(const Duration(seconds: 60), () {
+          Future.delayed(const Duration(seconds: 300), () {
             uploadStatusController.value = 'Upload timeout!';
             return false;
           }),
@@ -585,13 +738,9 @@ class _UploadTabState extends State<_UploadTab> {
         await Future.delayed(const Duration(seconds: 1));
       } finally {
         // Close dialog - ensure it closes even if there's an error
-        if (mounted) {
-          // Check if dialog is still open before trying to close
-          try {
-            Navigator.of(context, rootNavigator: false).pop();
-          } catch (e) {
-            debugPrint('Dialog already closed or error closing: $e');
-          }
+        // Close dialog - ensure it closes even if there's an error
+        if (mounted && Navigator.canPop(context)) {
+          Navigator.of(context).pop();
         }
         uploadStatusController.dispose();
       }
@@ -701,17 +850,25 @@ class _UploadTabState extends State<_UploadTab> {
       
       statusNotifier.value = 'Saving project to database...';
       
-      final success = await widget.projectService.createProject(project);
+      final success = await widget.projectService.createProject(
+        project,
+        pdfBytes: _selectedPdfBytes,
+        imageBytes: _selectedImageBytes,
+      );
       
       if (success) {
         statusNotifier.value = 'Upload complete!';
         // Brief delay to show success message, then return (dialog will close in finally block)
         await Future.delayed(const Duration(milliseconds: 500));
       } else {
-        errorMessage = 'Upload failed. Check console logs for details.';
-        statusNotifier.value = 'Upload failed!';
+        // Check both service error and local error
+        final serviceError = widget.projectService.lastUploadError;
+        // If serviceError is null, check if we caught something locally that wasn't propagated
+        final displayError = serviceError ?? errorMessage ?? 'Unknown error occurred';
+        
+        statusNotifier.value = 'Upload failed! $displayError';
         // Brief delay to show error message
-        await Future.delayed(const Duration(milliseconds: 800));
+        await Future.delayed(const Duration(milliseconds: 3000));
       }
       
       return success;
@@ -751,6 +908,7 @@ class _UploadTabState extends State<_UploadTab> {
     _abstractController.clear();
     _yearController.clear();
     _githubController.clear();
+    _customCategoryController.clear();
     _groupNameController.clear();
     _studentIdController.clear();
     _batchController.clear();
@@ -769,13 +927,78 @@ class _UploadTabState extends State<_UploadTab> {
       _selectedAcademicCourse = null;
       _selectedAssistantTeacherId = null;
       _selectedImagePaths.clear();
+      _selectedImageBytes.clear();
       _selectedPdfPath = null;
+      _selectedPdfBytes = null;
       _selectedTeacherId = null; // Reset to require selection
       _selectedSupervisorId = null; // Reset supervisor selection
       _isGroupProject = false;
       _numberOfMembers = 2;
       _initializeTeamMembers();
     });
+  }
+
+  Future<bool> _isGitHubRepoPublic(String url) async {
+    try {
+      final uri = Uri.tryParse(url);
+      if (uri == null) return false;
+      
+      // Clean up URL to extract owner/repo correctly
+      // Handle cases like: https://github.com/owner/repo.git
+      // or https://www.github.com/owner/repo
+      
+      final pathSegments = uri.pathSegments;
+      if (pathSegments.length < 2) return false;
+      
+      final owner = pathSegments[0];
+      String repo = pathSegments[1];
+      
+      // Remove .git suffix if present
+      if (repo.endsWith('.git')) {
+        repo = repo.substring(0, repo.length - 4);
+      }
+      
+      debugPrint('Checking GitHub Repo: $owner/$repo');
+      
+      // GitHub API to get repo details
+      // https://api.github.com/repos/OWNER/REPO
+      final apiUrl = Uri.parse('https://api.github.com/repos/$owner/$repo');
+      
+      final response = await http.get(apiUrl);
+      debugPrint('GitHub API Response: ${response.statusCode}');
+      
+      // 200 OK means it exists and is public (since we are not authenticated)
+      if (response.statusCode == 200) {
+        return true;
+      } 
+      
+      // 301 Moved Permanently (Repo renamed or transferred)
+      if (response.statusCode == 301) {
+         debugPrint('GitHub Repo Moved (301). Assuming public.');
+         return true;
+      }
+
+      // 404 means Not Found (Private repos return 404 to unauthenticated users)
+      if (response.statusCode == 404) {
+        return false;
+      }
+      
+      // 403 usually means rate limit exceeded. 
+      // In this case, we should fail safe and allow it to avoid blocking valid submissions.
+      if (response.statusCode == 403) {
+         debugPrint('GitHub Rate Limit Exceeded (403). Assuming public to avoid blocking.');
+         return true; // Fail safe
+      }
+
+      // Allow other status codes (e.g. 500) to fail safe
+      debugPrint('GitHub API returned unexpected status: ${response.statusCode}. Allowing submission.');
+      return true;
+    } catch (e) {
+      debugPrint('Error validating GitHub repo: $e');
+      // If error (e.g. network), fail safe or strict?
+      // Let's return false to be safe but usually network error will catch elsewhere
+      return false; 
+    }
   }
 
   Future<void> _pickImages() async {
@@ -786,16 +1009,39 @@ class _UploadTabState extends State<_UploadTab> {
         allowedExtensions: ['jpg', 'jpeg', 'png', 'gif', 'webp'],
       );
       if (result != null) {
+        // Check image limit
+        if (result.files.length > 5) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text('Maximum 5 images allowed. Please select fewer images.'),
+                backgroundColor: Theme.of(context).colorScheme.error,
+              ),
+            );
+          }
+          return;
+        }
+        
         setState(() {
-          _selectedImagePaths
-            ..clear()
-            ..addAll(result.paths.whereType<String>());
+          // On Web, use bytes. On Mobile, use paths.
+          if (kIsWeb) {
+            _selectedImageBytes = result.files.map((e) => e.bytes!).toList();
+            // Use filenames as dummy paths for UI display logic
+            _selectedImagePaths
+              ..clear()
+              ..addAll(result.files.map((e) => e.name).toList());
+          } else {
+            _selectedImagePaths
+              ..clear()
+              ..addAll(result.paths.whereType<String>());
+            _selectedImageBytes.clear();
+          }
         });
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('${result.paths.length} image(s) selected'),
+              content: Text('${result.files.length} image(s) selected'),
               backgroundColor: Theme.of(context).colorScheme.primary,
             ),
           );
@@ -818,8 +1064,16 @@ class _UploadTabState extends State<_UploadTab> {
         type: FileType.custom,
         allowedExtensions: ['pdf'],
       );
-      if (result != null && result.files.single.path != null) {
-        setState(() => _selectedPdfPath = result.files.single.path);
+      if (result != null) {
+        setState(() {
+          if (kIsWeb) {
+            _selectedPdfBytes = result.files.single.bytes;
+            _selectedPdfPath = result.files.single.name; // Use filename as path for UI
+          } else if (result.files.single.path != null) {
+            _selectedPdfPath = result.files.single.path;
+            _selectedPdfBytes = null;
+          }
+        });
         
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
@@ -1234,15 +1488,16 @@ class _UploadTabState extends State<_UploadTab> {
                 if (value == null || value.trim().isEmpty) {
                   return 'Please enter an abstract';
                 }
-                if (value.trim().length < 50) {
-                  return 'Abstract must be at least 50 characters';
+                final wordCount = value.trim().split(RegExp(r'\s+')).where((word) => word.isNotEmpty).length;
+                if (wordCount > 50) {
+                  return 'Abstract cannot exceed 50 words (currently $wordCount words)';
                 }
                 return null;
               },
             ),
             const SizedBox(height: 16),
 
-            DropdownButtonFormField<ProjectCategory>(
+              DropdownButtonFormField<ProjectCategory>(
               decoration: const InputDecoration(
                 labelText: 'Category',
                 prefixIcon: Icon(Icons.category),
@@ -1258,6 +1513,23 @@ class _UploadTabState extends State<_UploadTab> {
                 }
               },
             ),
+            if (_selectedCategory == ProjectCategory.other) ...[
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _customCategoryController,
+                decoration: const InputDecoration(
+                  labelText: 'Custom Category Name',
+                  hintText: 'Enter the category name',
+                  prefixIcon: Icon(Icons.edit),
+                ),
+                validator: (value) {
+                  if (_selectedCategory == ProjectCategory.other && (value == null || value.trim().isEmpty)) {
+                    return 'Please enter a category name';
+                  }
+                  return null;
+                },
+              ),
+            ],
             const SizedBox(height: 16),
 
             SizedBox(
@@ -1394,6 +1666,8 @@ class _UploadTabState extends State<_UploadTab> {
                       const SizedBox(height: 12),
                       TextFormField(
                         controller: _studentIdController,
+                        keyboardType: TextInputType.number,
+                        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                         decoration: const InputDecoration(labelText: 'Student ID'),
                         validator: (value) {
                           if (!_isGroupProject && (value == null || value.trim().isEmpty)) {
@@ -1410,6 +1684,7 @@ class _UploadTabState extends State<_UploadTab> {
                               controller: _batchController,
                               decoration: const InputDecoration(labelText: 'Batch'),
                               keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                               validator: (value) {
                                 if (!_isGroupProject && (value == null || value.trim().isEmpty)) {
                                   return 'Required';
@@ -1427,6 +1702,7 @@ class _UploadTabState extends State<_UploadTab> {
                               controller: _levelController,
                               decoration: const InputDecoration(labelText: 'Level'),
                               keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                               validator: (value) {
                                 if (!_isGroupProject && (value == null || value.trim().isEmpty)) {
                                   return 'Required';
@@ -1444,6 +1720,7 @@ class _UploadTabState extends State<_UploadTab> {
                               controller: _termController,
                               decoration: const InputDecoration(labelText: 'Term'),
                               keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                               validator: (value) {
                                 if (!_isGroupProject && (value == null || value.trim().isEmpty)) {
                                   return 'Required';
@@ -1538,6 +1815,8 @@ class _UploadTabState extends State<_UploadTab> {
                             const SizedBox(height: 12),
                             TextFormField(
                               controller: controllers['id'],
+                              keyboardType: TextInputType.number,
+                              inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                               decoration: const InputDecoration(labelText: 'Student ID'),
                               validator: (value) {
                                 if (_isGroupProject && (value == null || value.trim().isEmpty)) {
@@ -1554,6 +1833,7 @@ class _UploadTabState extends State<_UploadTab> {
                                     controller: controllers['batch'],
                                     decoration: const InputDecoration(labelText: 'Batch'),
                                     keyboardType: TextInputType.number,
+                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                                     validator: (value) {
                                       if (_isGroupProject && (value == null || value.trim().isEmpty)) {
                                         return 'Required';
@@ -1571,6 +1851,7 @@ class _UploadTabState extends State<_UploadTab> {
                                     controller: controllers['level'],
                                     decoration: const InputDecoration(labelText: 'Level'),
                                     keyboardType: TextInputType.number,
+                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                                     validator: (value) {
                                       if (_isGroupProject && (value == null || value.trim().isEmpty)) {
                                         return 'Required';
@@ -1588,6 +1869,7 @@ class _UploadTabState extends State<_UploadTab> {
                                     controller: controllers['term'],
                                     decoration: const InputDecoration(labelText: 'Term'),
                                     keyboardType: TextInputType.number,
+                                    inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                                     validator: (value) {
                                       if (_isGroupProject && (value == null || value.trim().isEmpty)) {
                                         return 'Required';

@@ -9,6 +9,7 @@ class Project {
   final String authorId;
   final String authorName;
   final ProjectCategory category;
+  final String? customCategory; // For when category is 'Other'
   final int year;
   final String? supervisor;
   final DateTime createdAt;
@@ -46,7 +47,9 @@ class Project {
   final AcademicCourse? academicCourse;
   final String? assistantTeacherId;
   final ProjectAward award;
-  final String? rejectionReason; // Reason for rejection if status is rejected
+  final double? showcaseMark; // Hidden mark out of 10
+  final List<ShowcaseEvaluation> evaluations; // List of evaluations by different teachers
+  final String? rejectionReason; // Reason for rejection/revision
 
   const Project({
     required this.id,
@@ -55,6 +58,7 @@ class Project {
     required this.authorId,
     required this.authorName,
     required this.category,
+    this.customCategory,
     required this.year,
     required this.semester,
     this.supervisor,
@@ -89,6 +93,8 @@ class Project {
     this.academicCourse,
     this.assistantTeacherId,
     this.rejectionReason,
+    this.showcaseMark,
+    this.evaluations = const [],
   });
 
   Project copyWith({
@@ -98,6 +104,7 @@ class Project {
     String? authorId,
     String? authorName,
     ProjectCategory? category,
+    String? customCategory,
     int? year,
     Semester? semester,
     String? supervisor,
@@ -132,6 +139,8 @@ class Project {
     AcademicCourse? academicCourse,
     String? assistantTeacherId,
     String? rejectionReason,
+    double? showcaseMark,
+    List<ShowcaseEvaluation>? evaluations,
   }) {
     return Project(
       id: id ?? this.id,
@@ -140,6 +149,7 @@ class Project {
       authorId: authorId ?? this.authorId,
       authorName: authorName ?? this.authorName,
       category: category ?? this.category,
+      customCategory: customCategory ?? this.customCategory,
       year: year ?? this.year,
       semester: semester ?? this.semester,
       supervisor: supervisor ?? this.supervisor,
@@ -174,6 +184,8 @@ class Project {
       academicCourse: academicCourse ?? this.academicCourse,
       assistantTeacherId: assistantTeacherId ?? this.assistantTeacherId,
       rejectionReason: rejectionReason ?? this.rejectionReason,
+      showcaseMark: showcaseMark ?? this.showcaseMark,
+      evaluations: evaluations ?? this.evaluations,
     );
   }
 
@@ -185,6 +197,7 @@ class Project {
       'authorId': authorId,
       'authorName': authorName,
       'category': category.name,
+      'customCategory': customCategory,
       'year': year,
       'semester': semester.name,
       'supervisor': supervisor,
@@ -219,6 +232,8 @@ class Project {
       'academicCourse': academicCourse?.name,
       'assistantTeacherId': assistantTeacherId,
       'rejectionReason': rejectionReason,
+      'showcaseMark': showcaseMark,
+      'evaluations': evaluations.map((e) => e.toMap()).toList(),
     };
   }
 }
@@ -450,3 +465,45 @@ class ProjectVersion {
 }
 
 
+
+class ShowcaseEvaluation {
+  final String teacherId;
+  final String teacherName;
+  final double mark;
+  final Map<String, double> criteria; // e.g., {'Innovation': 8.0, 'Technical': 9.0}
+  final String? feedback;
+  final DateTime updatedAt;
+
+  const ShowcaseEvaluation({
+    required this.teacherId,
+    required this.teacherName,
+    required this.mark,
+    this.criteria = const {},
+    this.feedback,
+    required this.updatedAt,
+  });
+
+  Map<String, dynamic> toMap() {
+    return {
+      'teacherId': teacherId,
+      'teacherName': teacherName,
+      'mark': mark,
+      'criteria': criteria,
+      'feedback': feedback,
+      'updatedAt': updatedAt.toIso8601String(),
+    };
+  }
+
+  factory ShowcaseEvaluation.fromMap(Map<String, dynamic> map) {
+    return ShowcaseEvaluation(
+      teacherId: map['teacherId'] ?? '',
+      teacherName: map['teacherName'] ?? 'Unknown',
+      mark: (map['mark'] ?? 0.0).toDouble(),
+      criteria: (map['criteria'] as Map<String, dynamic>?)?.map(
+            (key, value) => MapEntry(key, (value as num).toDouble()),
+          ) ?? {},
+      feedback: map['feedback'],
+      updatedAt: DateTime.tryParse(map['updatedAt'] ?? '') ?? DateTime.now(),
+    );
+  }
+}

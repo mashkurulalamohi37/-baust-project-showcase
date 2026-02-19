@@ -7,6 +7,7 @@ import '../models/project.dart';
 import '../models/user.dart';
 import 'firestore_service.dart';
 import 'auth_service.dart';
+import '../../services/email_service.dart';
 
 class NotificationService extends ChangeNotifier {
   static final NotificationService _instance = NotificationService._internal();
@@ -425,14 +426,42 @@ class NotificationService extends ChangeNotifier {
   /// Notify all approved teachers when a new project is submitted for approval
   Future<bool> notifyTeachersNewProjectPending(Project project) async {
     try {
-      // Get all approved teachers
-      final teachers = await FirestoreService.getAllUsers();
-      final approvedTeachers = teachers.where(
-        (user) => user.role == UserRole.teacher && user.isApproved,
-      ).toList();
+      // Get assigned teachers only
+      final assignedTeachers = <User>[];
+      
+      // Check main supervisor
+      if (project.facultyId != null && project.facultyId!.isNotEmpty) {
+        final faculty = await FirestoreService.getUser(project.facultyId!);
+        if (faculty != null) assignedTeachers.add(faculty);
+      }
+      
+      // Check assistant teacher
+      if (project.assistantTeacherId != null && project.assistantTeacherId!.isNotEmpty) {
+        final assistant = await FirestoreService.getUser(project.assistantTeacherId!);
+        if (assistant != null) assignedTeachers.add(assistant);
+      }
 
-      // Send notification to each teacher
-      for (final teacher in approvedTeachers) {
+      // If no specific teachers assigned, log it
+      if (assignedTeachers.isEmpty) {
+        debugPrint('NotificationService: No assigned teachers found to notify for project ${project.id}');
+        return false;
+      }
+
+      // Send notification to each assigned teacher
+      for (final teacher in assignedTeachers) {
+        // Skip if the teacher is actually the author (prevent self-notification)
+        if (teacher.id == project.authorId) {
+          debugPrint('NotificationService: Skipping notification for teacher ${teacher.name} because they are the project author');
+          continue;
+        }
+
+        // CRITICAL: Verify this user is actually a teacher/faculty
+        if (teacher.role != UserRole.teacher && teacher.role != UserRole.admin) {
+          debugPrint('NotificationService: Skipping notification for ${teacher.name} (${teacher.email}) - Not a teacher (role: ${teacher.role})');
+          continue;
+        }
+
+        // Send in-app notification
         await sendNotification(
           userId: teacher.id,
           title: 'New Project for Review 📝',
@@ -440,6 +469,22 @@ class NotificationService extends ChangeNotifier {
           type: NotificationType.newProjectPending,
           projectId: project.id,
         );
+
+        // Send email notification
+        if (teacher.email.isNotEmpty) {
+          try {
+            await EmailService.sendTeacherAssignmentEmail(
+              teacherEmail: teacher.email,
+              teacherName: teacher.name,
+              projectTitle: project.title,
+              studentName: project.authorName,
+              submissionType: project.submissionType.displayName,
+            );
+            debugPrint('NotificationService: Email sent to teacher ${teacher.name}');
+          } catch (e) {
+            debugPrint('NotificationService: Failed to send email to teacher ${teacher.name}: $e');
+          }
+        }
       }
 
       return true;

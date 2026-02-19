@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../mvc/models/user.dart';
 import '../mvc/controllers/auth_service.dart';
 import '../mvc/controllers/firestore_service.dart';
+import 'student_portfolio_screen.dart';
 
 class ProfileSettingsScreen extends StatefulWidget {
   const ProfileSettingsScreen({Key? key}) : super(key: key);
@@ -17,7 +18,12 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   bool _isLoading = false;
   bool _notificationsEnabled = true;
   final TextEditingController _nameController = TextEditingController();
+  final TextEditingController _bioController = TextEditingController();
+  final TextEditingController _linkedinController = TextEditingController();
+  final TextEditingController _githubController = TextEditingController();
+  final TextEditingController _skillsController = TextEditingController(); // Comma separated
   Designation? _selectedDesignation;
+  bool _isPublicProfile = false;
 
   @override
   void initState() {
@@ -28,6 +34,10 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
   @override
   void dispose() {
     _nameController.dispose();
+    _bioController.dispose();
+    _linkedinController.dispose();
+    _githubController.dispose();
+    _skillsController.dispose();
     super.dispose();
   }
 
@@ -38,6 +48,11 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         _notificationsEnabled = user.notificationsEnabled;
         _nameController.text = user.name;
         _selectedDesignation = user.designation;
+        _bioController.text = user.bio ?? '';
+        _linkedinController.text = user.linkedinUrl ?? '';
+        _githubController.text = user.githubUrl ?? '';
+        _skillsController.text = user.skills?.join(', ') ?? '';
+        _isPublicProfile = user.isPublicProfile;
       });
     }
   }
@@ -281,38 +296,49 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
 
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
-      body: CustomScrollView(
-        slivers: [
-          _buildSliverAppBar(user, colorScheme),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildSectionTitle('PREFERENCES'),
-                  const SizedBox(height: 12),
-                  _buildNotificationCard(colorScheme),
-                  const SizedBox(height: 24),
-                  if (_notificationsEnabled) ...[
-                    _buildSectionTitle('NOTIFICATION TYPES'),
-                    const SizedBox(height: 12),
-                    _buildNotificationTypesGrid(user.role, colorScheme),
-                    const SizedBox(height: 24),
-                  ],
-                  _buildSectionTitle('SHARE APP'),
-                  const SizedBox(height: 12),
-                  _buildShareAppCard(colorScheme),
-                  const SizedBox(height: 24),
-                  _buildSectionTitle('ACCOUNT INFORMATION'),
-                  const SizedBox(height: 12),
-                  _buildAccountInfoCard(user, colorScheme),
-                  const SizedBox(height: 40),
-                ],
+      body: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 900),
+          child: CustomScrollView(
+            slivers: [
+              _buildSliverAppBar(user, colorScheme),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 24, 16, 32),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildSectionTitle('PREFERENCES'),
+                      const SizedBox(height: 12),
+                      _buildNotificationCard(colorScheme),
+                      const SizedBox(height: 24),
+                      if (_notificationsEnabled) ...[
+                        _buildSectionTitle('NOTIFICATION TYPES'),
+                        const SizedBox(height: 12),
+                        _buildNotificationTypesGrid(user.role, colorScheme),
+                        const SizedBox(height: 24),
+                      ],
+                      _buildSectionTitle('SHARE APP'),
+                      const SizedBox(height: 12),
+                      _buildShareAppCard(colorScheme),
+                      const SizedBox(height: 24),
+                      if (user.role == UserRole.student) ...[
+                        _buildSectionTitle('PROFESSIONAL PROFILE'),
+                        const SizedBox(height: 12),
+                        _buildProfessionalProfileCard(user, colorScheme),
+                        const SizedBox(height: 24),
+                      ],
+                      _buildSectionTitle('ACCOUNT INFORMATION'),
+                      const SizedBox(height: 12),
+                      _buildAccountInfoCard(user, colorScheme),
+                      const SizedBox(height: 40),
+                    ],
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -841,6 +867,209 @@ class _ProfileSettingsScreenState extends State<ProfileSettingsScreen> {
         ),
       ],
     );
+  }
+
+
+
+
+  Widget _buildProfessionalProfileCard(User user, ColorScheme colorScheme) {
+    return Container(
+      decoration: BoxDecoration(
+        color: Theme.of(context).cardColor,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: colorScheme.outlineVariant.withOpacity(0.3)),
+      ),
+      child: Column(
+        children: [
+          SwitchListTile(
+            value: _isPublicProfile,
+            onChanged: _isLoading ? null : _togglePublicProfile,
+            activeColor: colorScheme.primary,
+            title: const Text(
+              'Public Profile',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+            ),
+            subtitle: Text(
+              _isPublicProfile
+                  ? 'Your profile is visible to others'
+                  : 'Only you can see your profile details',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+          ),
+          _buildDivider(),
+          _buildInfoRow(
+            Icons.article_rounded,
+            'Bio',
+            user.bio?.isNotEmpty == true ? user.bio! : 'Add a bio...',
+            colorScheme,
+            onEdit: _editBio,
+          ),
+          _buildDivider(),
+          _buildInfoRow(
+            Icons.auto_awesome_rounded,
+            'Skills',
+            user.skills?.isNotEmpty == true ? user.skills!.join(', ') : 'Add skills...',
+            colorScheme,
+            onEdit: _editSkills,
+          ),
+          _buildDivider(),
+          _buildInfoRow(
+            Icons.link_rounded,
+            'LinkedIn',
+            user.linkedinUrl?.isNotEmpty == true ? user.linkedinUrl! : 'Add LinkedIn URL...',
+            colorScheme,
+            onEdit: () => _editSocialLink('LinkedIn', _linkedinController),
+          ),
+          _buildDivider(),
+          _buildInfoRow(
+            Icons.code_rounded,
+            'GitHub',
+            user.githubUrl?.isNotEmpty == true ? user.githubUrl! : 'Add GitHub URL...',
+            colorScheme,
+            onEdit: () => _editSocialLink('GitHub', _githubController),
+          ),
+          const SizedBox(height: 16),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () {
+                   // Navigate to Portfolio Screen
+                   Navigator.push(context, MaterialPageRoute(builder: (_) => StudentPortfolioScreen(userId: user.id)));
+                },
+                icon: const Icon(Icons.visibility),
+                label: const Text('Preview Portfolio'),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _togglePublicProfile(bool value) async {
+    setState(() => _isLoading = true);
+    try {
+      final user = _authService.currentUser;
+      if (user != null) {
+        final updatedUser = user.copyWith(
+          isPublicProfile: value,
+          updatedAt: DateTime.now(),
+        );
+        await FirestoreService.updateUser(updatedUser);
+        await _authService.updateUserProfile(updatedUser);
+        setState(() {
+          _isPublicProfile = value;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+    }
+  }
+
+  Future<void> _editBio() async {
+    final user = _authService.currentUser;
+    if (user == null) return;
+    _bioController.text = user.bio ?? '';
+    
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Bio'),
+        content: TextField(
+          controller: _bioController,
+          maxLines: 3,
+          decoration: const InputDecoration(hintText: 'Tell us about yourself...', border: OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, _bioController.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+
+    if (result != null && result != user.bio) {
+      await _updateUserField(user.copyWith(bio: result));
+    }
+  }
+
+  Future<void> _editSkills() async {
+    final user = _authService.currentUser;
+    if (user == null) return;
+    _skillsController.text = user.skills?.join(', ') ?? '';
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Edit Skills'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter skills separated by commas (e.g. Flutter, Dart, UI/UX)'),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _skillsController,
+              decoration: const InputDecoration(hintText: 'Flutter, Dart...', border: OutlineInputBorder()),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, _skillsController.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      final skillsList = result.split(',').map((s) => s.trim()).where((s) => s.isNotEmpty).toList();
+      await _updateUserField(user.copyWith(skills: skillsList));
+    }
+  }
+
+  Future<void> _editSocialLink(String platform, TextEditingController controller) async {
+    final user = _authService.currentUser;
+    if (user == null) return;
+    
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Edit $platform URL'),
+        content: TextField(
+          controller: controller,
+          decoration: InputDecoration(hintText: 'https://...', border: const OutlineInputBorder()),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+          ElevatedButton(onPressed: () => Navigator.pop(context, controller.text.trim()), child: const Text('Save')),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      if (platform == 'LinkedIn') {
+        await _updateUserField(user.copyWith(linkedinUrl: result));
+      } else {
+        await _updateUserField(user.copyWith(githubUrl: result));
+      }
+    }
+  }
+
+  Future<void> _updateUserField(User updatedUser) async {
+    setState(() => _isLoading = true);
+    try {
+      final user = updatedUser.copyWith(updatedAt: DateTime.now());
+      await FirestoreService.updateUser(user);
+      await _authService.updateUserProfile(user);
+      setState(() => _isLoading = false);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Profile updated!'), backgroundColor: Colors.green));
+    } catch (e) {
+      setState(() => _isLoading = false);
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to update: $e'), backgroundColor: Colors.red));
+    }
   }
 }
 

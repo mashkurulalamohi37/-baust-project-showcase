@@ -3,6 +3,7 @@ import '../mvc/models/project.dart';
 import '../mvc/controllers/project_service.dart';
 import '../mvc/controllers/auth_service.dart';
 import 'project_detail.dart';
+import '../../services/export_service.dart';
 
 class SemesterArchiveScreen extends StatefulWidget {
   const SemesterArchiveScreen({super.key});
@@ -87,7 +88,7 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
       return Scaffold(
         extendBodyBehindAppBar: true,
         appBar: AppBar(
-          title: const Text('Project Archives', style: TextStyle(fontWeight: FontWeight.bold)),
+          title: const Text('Project Archives', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
           elevation: 0,
           backgroundColor: Colors.transparent,
           flexibleSpace: Container(
@@ -102,6 +103,9 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
               ),
             ),
           ),
+          actions: [
+            const SizedBox(width: 16),
+          ],
         ),
         body: Container(
           decoration: BoxDecoration(
@@ -171,12 +175,23 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
 
     // Academic Level: Select Course
     if (_selectedSubmissionType == ProjectSubmissionType.academic && _selectedAcademicCourse == null) {
-       return Scaffold(
+       return PopScope(
+         canPop: false,
+         onPopInvokedWithResult: (didPop, result) {
+           if (didPop) return;
+           setState(() => _selectedSubmissionType = null);
+         },
+         child: Scaffold(
         extendBodyBehindAppBar: true,
         appBar: AppBar(
-          title: const Text('Academic Courses', style: TextStyle(fontWeight: FontWeight.bold)),
+          title: const Text('Academic Courses', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
           elevation: 0,
           backgroundColor: Colors.transparent,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => setState(() => _selectedSubmissionType = null),
+          ),
+          automaticallyImplyLeading: false,
           flexibleSpace: Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -188,10 +203,6 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
                 ],
               ),
             ),
-          ),
-          leading: IconButton(
-            icon: const Icon(Icons.arrow_back),
-            onPressed: () => setState(() => _selectedSubmissionType = null), 
           ),
         ),
         body: Container(
@@ -268,6 +279,7 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
           },
         ),
         ),
+       ),
       );
     }
 
@@ -293,12 +305,33 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
       title = _selectedAcademicCourse!.displayName;
     }
 
-    return Scaffold(
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        if (_selectedSubmissionType == ProjectSubmissionType.academic && _selectedAcademicCourse != null) {
+          setState(() => _selectedAcademicCourse = null);
+        } else {
+          setState(() => _selectedSubmissionType = null);
+        }
+      },
+      child: Scaffold(
       extendBodyBehindAppBar: true,
       appBar: AppBar(
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
         backgroundColor: Colors.transparent,
         elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.white),
+          onPressed: () {
+            if (_selectedSubmissionType == ProjectSubmissionType.academic && _selectedAcademicCourse != null) {
+              setState(() => _selectedAcademicCourse = null);
+            } else {
+              setState(() => _selectedSubmissionType = null);
+            }
+          },
+        ),
+        automaticallyImplyLeading: false,
         flexibleSpace: Container(
           decoration: const BoxDecoration(
             gradient: LinearGradient(
@@ -311,16 +344,9 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
             ),
           ),
         ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () {
-            if (_selectedSubmissionType == ProjectSubmissionType.academic && _selectedAcademicCourse != null) {
-              setState(() => _selectedAcademicCourse = null);
-            } else {
-              setState(() => _selectedSubmissionType = null);
-            }
-          },
-        ),
+        actions: [
+          const SizedBox(width: 16),
+        ],
       ),
       body: Container(
         decoration: BoxDecoration(
@@ -478,6 +504,7 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
               },
             ),
       ),
+      ),
     );
   }
 
@@ -560,7 +587,7 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
   }
 }
 
-class SemesterProjectsScreen extends StatelessWidget {
+class SemesterProjectsScreen extends StatefulWidget {
   final String semesterName;
   final int year;
   final List<Project> projects;
@@ -573,9 +600,120 @@ class SemesterProjectsScreen extends StatelessWidget {
   });
 
   @override
+  State<SemesterProjectsScreen> createState() => _SemesterProjectsScreenState();
+}
+
+class _SemesterProjectsScreenState extends State<SemesterProjectsScreen> {
+  final ProjectService _projectService = ProjectService();
+  bool _isExporting = false;
+
+  Future<void> _showExportFilterDialog() async {
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => SimpleDialog(
+        title: const Text('Export Projects'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        backgroundColor: Theme.of(context).cardColor,
+        children: [
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'all'),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8.0),
+              child: Text('All Projects'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'accepted'),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8.0),
+              child: Text('Accepted Projects Only'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'rejected'),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8.0),
+              child: Text('Rejected Projects Only'),
+            ),
+          ),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'decided'),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8.0),
+              child: Text('Consolidated (Accepted + Rejected)'),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (result != null) {
+      _exportProjects(result);
+    }
+  }
+
+  Future<void> _exportProjects(String filter) async {
+    setState(() => _isExporting = true);
+    try {
+      // Fetch ALL projects from service to include rejected ones which might be hidden in main view
+      final allProjects = _projectService.projects;
+      List<Project> projectsToExport = [];
+
+      for (var project in allProjects) {
+        // 1. Filter by Semester and Year
+        if (project.semester.displayName != widget.semesterName || project.year != widget.year) {
+          continue;
+        }
+
+        // 2. Apply Status Filter
+        if (filter == 'accepted' && project.status != ProjectStatus.approved) continue;
+        if (filter == 'rejected' && project.status != ProjectStatus.rejected) continue;
+        if (filter == 'decided' && 
+            project.status != ProjectStatus.approved && 
+            project.status != ProjectStatus.rejected) {
+          continue;
+        }
+
+        projectsToExport.add(project);
+      }
+
+      debugPrint('SemesterProjectsScreen: Found ${allProjects.length} total projects, filtering for $filter for ${widget.semesterName} ${widget.year} -> ${projectsToExport.length} projects to export');
+
+      if (projectsToExport.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('No projects found matching criteria')),
+          );
+        }
+        return;
+      }
+
+      final capitalizedFilter = filter[0].toUpperCase() + filter.substring(1);
+      final fileName = '${widget.semesterName}_${widget.year}_Projects_$capitalizedFilter.csv';
+      await ExportService.exportProjects(projectsToExport, fileName: fileName);
+      
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Export completed successfully')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isExporting = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     // Sort projects: Winners first, then others
-    final sortedProjects = List<Project>.from(projects)..sort((a, b) {
+    final sortedProjects = List<Project>.from(widget.projects)..sort((a, b) {
       if (a.award != ProjectAward.none && b.award == ProjectAward.none) return -1;
       if (a.award == ProjectAward.none && b.award != ProjectAward.none) return 1;
       if (a.award != ProjectAward.none && b.award != ProjectAward.none) {
@@ -588,8 +726,8 @@ class SemesterProjectsScreen extends StatelessWidget {
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         title: Text(
-          '$semesterName $year Projects',
-          style: const TextStyle(fontWeight: FontWeight.bold),
+          '${widget.semesterName} ${widget.year} Projects',
+          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
         ),
         elevation: 0,
         backgroundColor: Colors.transparent,
@@ -605,6 +743,17 @@ class SemesterProjectsScreen extends StatelessWidget {
             ),
           ),
         ),
+        actions: [
+          if (AuthService().isAdmin || AuthService().isTeacher)
+            IconButton(
+              icon: _isExporting 
+                  ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                  : const Icon(Icons.download, color: Colors.white),
+              onPressed: _isExporting ? null : _showExportFilterDialog,
+              tooltip: 'Export Semester Data',
+            ),
+          const SizedBox(width: 16),
+        ],
       ),
       body: Container(
         decoration: BoxDecoration(

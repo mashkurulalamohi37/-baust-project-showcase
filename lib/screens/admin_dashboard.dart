@@ -7,7 +7,12 @@ import 'project_detail.dart';
 import 'semester_archive_new.dart';
 import 'profile_settings_screen.dart';
 import '../mvc/controllers/notification_service.dart';
+import '../utils/responsive_layout.dart';
+import '../widgets/web_notification_panel.dart';
 import 'notifications_screen.dart';
+import '../services/announcement_service.dart';
+import '../models/announcement.dart';
+import 'package:intl/intl.dart';
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -37,69 +42,124 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   }
 
   @override
+  @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Admin Dashboard'),
-        backgroundColor: Theme.of(context).colorScheme.errorContainer,
-        foregroundColor: Theme.of(context).colorScheme.onErrorContainer,
-        actions: [
-          AnimatedBuilder(
-            animation: _notificationService,
-            builder: (context, _) {
-              return Badge(
-                label: Text('${_notificationService.unreadCount}'),
-                isLabelVisible: _notificationService.unreadCount > 0,
-                child: IconButton(
-                  icon: const Icon(Icons.notifications),
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
-                    );
-                  },
-                ),
+    return ResponsiveDashboardLayout(
+      title: const Text('Admin Dashboard'),
+      selectedIndex: _selectedIndex,
+      onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
+      userEmail: _authService.currentUser?.email,
+      userRole: _authService.currentUser?.role.displayName,
+      onLogout: () async {
+        await _authService.logout();
+        if (mounted) {
+          Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+        }
+      },
+      actions: [
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final isDesktop = MediaQuery.of(context).size.width >= 900;
+            if (isDesktop) {
+              return WebNotificationPanel(
+                notificationService: _notificationService,
+                onViewAll: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const NotificationsScreen()),
+                  );
+                },
               );
-            },
-          ),
-          PopupMenuButton<String>(
-            onSelected: (String value) async {
-              if (value == 'profile') {
-                Navigator.of(context).push(
-                  MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
-                );
-              } else if (value == 'logout') {
-                await _authService.logout();
-                if (mounted) {
-                  Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
-                }
+            } else {
+              return AnimatedBuilder(
+                animation: _notificationService,
+                builder: (context, _) {
+                  return Badge(
+                    label: Text('${_notificationService.unreadCount}'),
+                    isLabelVisible: _notificationService.unreadCount > 0,
+                    child: IconButton(
+                      icon: const Icon(Icons.notifications),
+                      onPressed: () {
+                        Navigator.of(context).push(
+                          MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                        );
+                      },
+                    ),
+                  );
+                },
+              );
+            }
+          },
+        ),
+        PopupMenuButton<String>(
+          onSelected: (String value) async {
+            if (value == 'profile') {
+              Navigator.of(context).push(
+                MaterialPageRoute(builder: (context) => const ProfileSettingsScreen()),
+              );
+            } else if (value == 'logout') {
+              await _authService.logout();
+              if (mounted) {
+                Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
               }
-            },
-            itemBuilder: (BuildContext context) => [
-              PopupMenuItem<String>(
-                value: 'profile',
-                child: Row(
-                  children: [
-                    const Icon(Icons.admin_panel_settings),
-                    const SizedBox(width: 8),
-                    Text(_authService.currentUser?.name ?? 'Admin'),
-                  ],
-                ),
+            }
+          },
+          itemBuilder: (BuildContext context) => [
+            PopupMenuItem<String>(
+              value: 'profile',
+              child: Row(
+                children: [
+                  const Icon(Icons.admin_panel_settings),
+                  const SizedBox(width: 8),
+                  Text(_authService.currentUser?.name ?? 'Admin'),
+                ],
               ),
-              const PopupMenuDivider(),
-              const PopupMenuItem<String>(
-                value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout),
-                    SizedBox(width: 8),
-                    Text('Logout'),
-                  ],
-                ),
+            ),
+            const PopupMenuDivider(),
+            const PopupMenuItem<String>(
+              value: 'logout',
+              child: Row(
+                children: [
+                  Icon(Icons.logout),
+                  SizedBox(width: 8),
+                  Text('Logout'),
+                ],
               ),
-            ],
-          ),
-        ],
-      ),
+            ),
+          ],
+        ),
+      ],
+      destinations: const [
+        NavigationDestination(
+          icon: Icon(Icons.dashboard_outlined),
+          selectedIcon: Icon(Icons.dashboard),
+          label: 'Overview',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.people_outlined),
+          selectedIcon: Icon(Icons.people),
+          label: 'Users',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.folder_outlined),
+          selectedIcon: Icon(Icons.folder),
+          label: 'Projects',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.settings_outlined),
+          selectedIcon: Icon(Icons.settings),
+          label: 'Settings',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.archive_outlined),
+          selectedIcon: Icon(Icons.archive),
+          label: 'Archives',
+        ),
+        NavigationDestination(
+          icon: Icon(Icons.campaign_outlined),
+          selectedIcon: Icon(Icons.campaign),
+          label: 'Announcements',
+        ),
+      ],
       body: AnimatedBuilder(
         animation: _projectService,
         builder: (context, child) {
@@ -115,40 +175,10 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               _ProjectManagementTab(projectService: _projectService, authService: _authService),
               _SystemSettingsTab(projectService: _projectService, authService: _authService),
               const SemesterArchiveScreen(),
+              const _AnnouncementManagementTab(),
             ],
           );
         },
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
-        destinations: const [
-          NavigationDestination(
-            icon: Icon(Icons.dashboard_outlined),
-            selectedIcon: Icon(Icons.dashboard),
-            label: 'Overview',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.people_outlined),
-            selectedIcon: Icon(Icons.people),
-            label: 'Users',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.folder_outlined),
-            selectedIcon: Icon(Icons.folder),
-            label: 'Projects',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.settings_outlined),
-            selectedIcon: Icon(Icons.settings),
-            label: 'Settings',
-          ),
-          NavigationDestination(
-            icon: Icon(Icons.archive_outlined),
-            selectedIcon: Icon(Icons.archive),
-            label: 'Archives',
-          ),
-        ],
       ),
     );
   }
@@ -212,7 +242,11 @@ class _OverviewTabState extends State<_OverviewTab> {
     final totalReviews = widget.projectService.reviews.length;
     final featuredCount = allProjects.where((p) => p.isFeatured || p.status == ProjectStatus.featured).length;
 
-    return RefreshIndicator(
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: RefreshIndicator(
       onRefresh: _refresh,
       child: ListView(
         padding: const EdgeInsets.all(16),
@@ -349,6 +383,8 @@ class _OverviewTabState extends State<_OverviewTab> {
         ),
         ],
       ),
+    ),
+      ),
     );
   }
 }
@@ -388,7 +424,11 @@ class _UserManagementTabState extends State<_UserManagementTab> {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
         // Header
@@ -492,6 +532,8 @@ class _UserManagementTabState extends State<_UserManagementTab> {
             searchQuery: _searchQuery, // Pass search query down
           ),
       ],
+        ),
+      ),
     );
   }
 }
@@ -537,7 +579,11 @@ class _ProjectManagementTabState extends State<_ProjectManagementTab> {
              (project.studentId?.toLowerCase().contains(query) ?? false);
     }).toList();
 
-    return ListView(
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
         // Header
@@ -678,6 +724,8 @@ class _ProjectManagementTabState extends State<_ProjectManagementTab> {
                 ),
               )),
       ],
+        ),
+      ),
     );
   }
 }
@@ -689,7 +737,11 @@ class _SystemSettingsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return ListView(
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
         // Header
@@ -801,6 +853,8 @@ class _SystemSettingsTab extends StatelessWidget {
           ],
         ),
       ],
+        ),
+      ),
     );
   }
 }
@@ -2236,6 +2290,385 @@ class _StatusChip extends StatelessWidget {
         overflow: TextOverflow.ellipsis,
         maxLines: 1,
       ),
+    );
+  }
+}
+
+class _AnnouncementManagementTab extends StatefulWidget {
+  const _AnnouncementManagementTab();
+
+  @override
+  State<_AnnouncementManagementTab> createState() => _AnnouncementManagementTabState();
+}
+
+class _AnnouncementManagementTabState extends State<_AnnouncementManagementTab> {
+  final AnnouncementService _announcementService = AnnouncementService();
+
+  @override
+  void initState() {
+    super.initState();
+    _announcementService.loadAnnouncements();
+  }
+
+  void _showCreateEditDialog({Announcement? announcement}) {
+    showDialog(
+      context: context,
+      builder: (context) => _CreateEditAnnouncementDialog(
+        announcement: announcement,
+        onSave: (newAnnouncement) async {
+          if (announcement == null) {
+            await _announcementService.createAnnouncement(newAnnouncement);
+          } else {
+            await _announcementService.updateAnnouncement(newAnnouncement);
+          }
+          if (mounted) _announcementService.loadAnnouncements();
+        },
+      ),
+    );
+  }
+
+  void _deleteAnnouncement(String id) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Delete Announcement'),
+        content: const Text('Are you sure you want to delete this announcement?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      await _announcementService.deleteAnnouncement(id);
+      if (mounted) _announcementService.loadAnnouncements();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: AnimatedBuilder(
+          animation: _announcementService,
+          builder: (context, _) {
+            if (_announcementService.isLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            return Scaffold(
+              backgroundColor: Colors.transparent,
+              floatingActionButton: FloatingActionButton.extended(
+                onPressed: () => _showCreateEditDialog(),
+                label: const Text('New Announcement'),
+                icon: const Icon(Icons.add),
+              ),
+              body: ListView(
+                padding: const EdgeInsets.all(16),
+                children: [
+                  // Header
+                  Card(
+                    color: Theme.of(context).colorScheme.tertiaryContainer,
+                    child: Padding(
+                      padding: const EdgeInsets.all(20),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.campaign,
+                            size: 48,
+                            color: Theme.of(context).colorScheme.onTertiaryContainer,
+                          ),
+                          const SizedBox(height: 12),
+                          Text(
+                            'Announcements',
+                            style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              color: Theme.of(context).colorScheme.onTertiaryContainer,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Manage alerts, deadlines, and information for all users',
+                            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Theme.of(context).colorScheme.onTertiaryContainer.withOpacity(0.8),
+                            ),
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+
+                  if (_announcementService.announcements.isEmpty)
+                    Center(
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          children: [
+                            Icon(Icons.campaign_outlined, size: 64, color: Theme.of(context).disabledColor),
+                            const SizedBox(height: 16),
+                            Text(
+                              'No announcements yet',
+                              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                color: Theme.of(context).disabledColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ..._announcementService.announcements.map((announcement) => Card(
+                      margin: const EdgeInsets.only(bottom: 16),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.all(16),
+                        leading: CircleAvatar(
+                          backgroundColor: _getPriorityColor(announcement.priority).withOpacity(0.2),
+                          child: Icon(
+                            _getTypeIcon(announcement.type),
+                            color: _getPriorityColor(announcement.priority),
+                          ),
+                        ),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                announcement.title,
+                                style: const TextStyle(fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                            if (!announcement.isVisible)
+                              Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withOpacity(0.2),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: const Text('Hidden', style: TextStyle(fontSize: 10)),
+                              ),
+                          ],
+                        ),
+                        subtitle: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 8),
+                            Text(announcement.content),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                Icon(Icons.access_time, size: 14, color: Theme.of(context).disabledColor),
+                                const SizedBox(width: 4),
+                                Text(
+                                  DateFormat('MMM d, y h:mm a').format(announcement.createdAt),
+                                  style: Theme.of(context).textTheme.bodySmall,
+                                ),
+                                if (announcement.expiresAt != null) ...[
+                                  const SizedBox(width: 16),
+                                  Icon(Icons.event_busy, size: 14, color: Theme.of(context).disabledColor),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'Expires: ${DateFormat('MMM d, y').format(announcement.expiresAt!)}',
+                                    style: Theme.of(context).textTheme.bodySmall,
+                                  ),
+                                ],
+                              ],
+                            ),
+                          ],
+                        ),
+                        trailing: PopupMenuButton<String>(
+                          onSelected: (value) {
+                            if (value == 'edit') {
+                              _showCreateEditDialog(announcement: announcement);
+                            } else if (value == 'delete') {
+                              _deleteAnnouncement(announcement.id);
+                            } else if (value == 'toggle') {
+                              _announcementService.updateAnnouncement(
+                                announcement.copyWith(isVisible: !announcement.isVisible),
+                              );
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(value: 'edit', child: Text('Edit')),
+                            PopupMenuItem(
+                              value: 'toggle', 
+                              child: Text(announcement.isVisible ? 'Hide' : 'Show'),
+                            ),
+                            const PopupMenuItem(
+                              value: 'delete', 
+                              child: Text('Delete', style: TextStyle(color: Colors.red)),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )),
+                ],
+              ),
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Color _getPriorityColor(AnnouncementPriority priority) {
+    switch (priority) {
+      case AnnouncementPriority.high: return Colors.red;
+      case AnnouncementPriority.normal: return Colors.blue;
+      case AnnouncementPriority.low: return Colors.green;
+    }
+  }
+
+  IconData _getTypeIcon(AnnouncementType type) {
+    switch (type) {
+      case AnnouncementType.alert: return Icons.warning;
+      case AnnouncementType.deadline: return Icons.timer;
+      case AnnouncementType.event: return Icons.event;
+      case AnnouncementType.info: return Icons.info;
+    }
+  }
+}
+
+class _CreateEditAnnouncementDialog extends StatefulWidget {
+  final Announcement? announcement;
+  final Function(Announcement) onSave;
+
+  const _CreateEditAnnouncementDialog({this.announcement, required this.onSave});
+
+  @override
+  State<_CreateEditAnnouncementDialog> createState() => _CreateEditAnnouncementDialogState();
+}
+
+class _CreateEditAnnouncementDialogState extends State<_CreateEditAnnouncementDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _titleController;
+  late TextEditingController _contentController;
+  AnnouncementType _type = AnnouncementType.info;
+  AnnouncementPriority _priority = AnnouncementPriority.normal;
+  DateTime? _expiresAt;
+  bool _isVisible = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleController = TextEditingController(text: widget.announcement?.title);
+    _contentController = TextEditingController(text: widget.announcement?.content);
+    if (widget.announcement != null) {
+      _type = widget.announcement!.type;
+      _priority = widget.announcement!.priority;
+      _expiresAt = widget.announcement!.expiresAt;
+      _isVisible = widget.announcement!.isVisible;
+    }
+  }
+
+  @override
+  void dispose() {
+    _titleController.dispose();
+    _contentController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.announcement == null ? 'New Announcement' : 'Edit Announcement'),
+      content: SingleChildScrollView(
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _titleController,
+                decoration: const InputDecoration(labelText: 'Title'),
+                validator: (v) => v?.isEmpty == true ? 'Required' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _contentController,
+                decoration: const InputDecoration(labelText: 'Content'),
+                maxLines: 3,
+                validator: (v) => v?.isEmpty == true ? 'Required' : null,
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<AnnouncementType>(
+                value: _type,
+                decoration: const InputDecoration(labelText: 'Type'),
+                items: AnnouncementType.values.map((t) => DropdownMenuItem(
+                  value: t,
+                  child: Text(t.displayName),
+                )).toList(),
+                onChanged: (v) => setState(() => _type = v!),
+              ),
+              const SizedBox(height: 16),
+              DropdownButtonFormField<AnnouncementPriority>(
+                value: _priority,
+                decoration: const InputDecoration(labelText: 'Priority'),
+                items: AnnouncementPriority.values.map((p) => DropdownMenuItem(
+                  value: p,
+                  child: Text(p.displayName),
+                )).toList(),
+                onChanged: (v) => setState(() => _priority = v!),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                title: const Text('Expiration Date'),
+                subtitle: Text(_expiresAt == null 
+                  ? 'None' 
+                  : DateFormat('MMM d, y').format(_expiresAt!)),
+                trailing: IconButton(
+                  icon: const Icon(Icons.calendar_today),
+                  onPressed: () async {
+                    final date = await showDatePicker(
+                      context: context,
+                      initialDate: _expiresAt ?? DateTime.now().add(const Duration(days: 7)),
+                      firstDate: DateTime.now(),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (date != null) setState(() => _expiresAt = date);
+                  },
+                ),
+              ),
+              SwitchListTile(
+                title: const Text('Visible'),
+                value: _isVisible,
+                onChanged: (v) => setState(() => _isVisible = v),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
+        FilledButton(
+          onPressed: () {
+            if (_formKey.currentState!.validate()) {
+              final announcement = Announcement(
+                id: widget.announcement?.id ?? '',
+                title: _titleController.text,
+                content: _contentController.text,
+                createdAt: widget.announcement?.createdAt ?? DateTime.now(),
+                expiresAt: _expiresAt,
+                type: _type,
+                priority: _priority,
+                isVisible: _isVisible,
+                authorId: AuthService().currentUser?.id ?? '', // Use Service locator if needed, or assume global
+                authorName: AuthService().currentUser?.name ?? 'Admin',
+              );
+              widget.onSave(announcement);
+              Navigator.pop(context);
+            }
+          },
+          child: const Text('Save'),
+        ),
+      ],
     );
   }
 }

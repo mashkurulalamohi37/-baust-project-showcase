@@ -12,6 +12,12 @@ import 'notifications_screen.dart';
 
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
+import '../utils/responsive_layout.dart';
+import '../widgets/web_notification_panel.dart';
+import '../services/announcement_service.dart';
+import '../models/announcement.dart';
+import 'package:intl/intl.dart';
+import '../widgets/announcement_carousel.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   const TeacherDashboardScreen({super.key});
@@ -24,6 +30,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   final ProjectService _projectService = ProjectService();
   final AuthService _authService = AuthService();
   final NotificationService _notificationService = NotificationService();
+  final AnnouncementService _announcementService = AnnouncementService();
   int _selectedIndex = 0;
   DateTime? _lastPressedAt;
 
@@ -34,6 +41,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
     _authService.addListener(_onAuthChanged);
     _onAuthChanged();
     _loadNotifications();
+    _announcementService.loadAnnouncements();
   }
 
   void _loadNotifications() {
@@ -58,6 +66,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
   }
 
   @override
+
   Widget build(BuildContext context) {
     return PopScope(
       canPop: false,
@@ -79,27 +88,50 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
           await SystemNavigator.pop();
         }
       },
-      child: Scaffold(
-      appBar: AppBar(
+      child: ResponsiveDashboardLayout(
         title: const Text('Teacher Dashboard'),
-        backgroundColor: Theme.of(context).colorScheme.secondaryContainer,
-        foregroundColor: Theme.of(context).colorScheme.onSecondaryContainer,
+        selectedIndex: _selectedIndex,
+        onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
+        userEmail: _authService.currentUser?.email,
+        userRole: _authService.currentUser?.role.displayName,
+        onLogout: () async {
+          await _authService.logout();
+          if (mounted) {
+            Navigator.of(context).pushNamedAndRemoveUntil('/auth', (route) => false);
+          }
+        },
         actions: [
-          AnimatedBuilder(
-            animation: _notificationService,
-            builder: (context, _) {
-              return Badge(
-                label: Text('${_notificationService.unreadCount}'),
-                isLabelVisible: _notificationService.unreadCount > 0,
-                child: IconButton(
-                  icon: const Icon(Icons.notifications),
-                  onPressed: () {
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isDesktop = MediaQuery.of(context).size.width >= 900;
+              if (isDesktop) {
+                return WebNotificationPanel(
+                  notificationService: _notificationService,
+                  onViewAll: () {
                     Navigator.of(context).push(
-                      MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                      MaterialPageRoute(builder: (_) => const NotificationsScreen()),
                     );
                   },
-                ),
-              );
+                );
+              } else {
+                return AnimatedBuilder(
+                  animation: _notificationService,
+                  builder: (context, _) {
+                    return Badge(
+                      label: Text('${_notificationService.unreadCount}'),
+                      isLabelVisible: _notificationService.unreadCount > 0,
+                      child: IconButton(
+                        icon: const Icon(Icons.notifications),
+                        onPressed: () {
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (context) => const NotificationsScreen()),
+                          );
+                        },
+                      ),
+                    );
+                  },
+                );
+              }
             },
           ),
           PopupMenuButton<String>(
@@ -140,29 +172,6 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             ],
           ),
         ],
-      ),
-      body: AnimatedBuilder(
-        animation: Listenable.merge([_projectService, _authService]),
-        builder: (context, child) {
-          if (_projectService.isLoading) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          return IndexedStack(
-            index: _selectedIndex,
-            children: [
-              _ReviewTab(projectService: _projectService, authService: _authService),
-              _AllProjectsTab(projectService: _projectService, authService: _authService),
-              _MyReviewsTab(projectService: _projectService, authService: _authService),
-              _AnalyticsTab(projectService: _projectService, authService: _authService),
-              const SemesterArchiveScreen(),
-            ],
-          );
-        },
-      ),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _selectedIndex,
-        onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.rate_review_outlined),
@@ -190,16 +199,43 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             label: 'Archives',
           ),
         ],
-      ),
+        body: AnimatedBuilder(
+          animation: Listenable.merge([_projectService, _authService]),
+          builder: (context, child) {
+            if (_projectService.isLoading) {
+              return const Center(child: CircularProgressIndicator());
+            }
+
+            return IndexedStack(
+              index: _selectedIndex,
+              children: [
+                _ReviewTab(
+                  projectService: _projectService, 
+                  authService: _authService,
+                  announcementService: _announcementService,
+                ),
+                _AllProjectsTab(projectService: _projectService, authService: _authService),
+                _MyReviewsTab(projectService: _projectService, authService: _authService),
+                _AnalyticsTab(projectService: _projectService, authService: _authService),
+                const SemesterArchiveScreen(),
+              ],
+            );
+          },
+        ),
       ),
     );
   }
 }
 
 class _ReviewTab extends StatefulWidget {
-  const _ReviewTab({required this.projectService, required this.authService});
+  const _ReviewTab({
+    required this.projectService, 
+    required this.authService,
+    required this.announcementService,
+  });
   final ProjectService projectService;
   final AuthService authService;
+  final AnnouncementService announcementService;
 
   @override
   State<_ReviewTab> createState() => _ReviewTabState();
@@ -238,9 +274,32 @@ class _ReviewTabState extends State<_ReviewTab> {
         .filterProjectsByStatus(ProjectStatus.approved)
         .toList();
     
-    return ListView(
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        // Announcements Section
+        AnimatedBuilder(
+          animation: widget.announcementService,
+          builder: (context, _) {
+            final activeAnnouncements = widget.announcementService.getActiveAnnouncementsStream();
+            return StreamBuilder<List<Announcement>>(
+              stream: activeAnnouncements,
+              builder: (context, snapshot) {
+                if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
+                
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: AnnouncementCarousel(announcements: snapshot.data!),
+                );
+              },
+            );
+          },
+        ),
+
         // Header
         Card(
           color: Theme.of(context).colorScheme.secondaryContainer,
@@ -414,6 +473,8 @@ class _ReviewTabState extends State<_ReviewTab> {
             showReviewActions: false,
           )),
       ],
+        ),
+      ),
     );
   }
 
@@ -428,6 +489,8 @@ class _ReviewTabState extends State<_ReviewTab> {
       ),
     );
   }
+
+
 }
 
 class _AllProjectsTab extends StatefulWidget {
@@ -480,7 +543,11 @@ class _AllProjectsTabState extends State<_AllProjectsTab> {
       return matchesStatus && matchesSearch;
     }).toList();
 
-    return ListView(
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
         // Header
@@ -634,6 +701,8 @@ class _AllProjectsTabState extends State<_AllProjectsTab> {
                 ),
               )),
       ],
+        ),
+      ),
     );
   }
 }
@@ -653,7 +722,11 @@ class _MyReviewsTab extends StatelessWidget {
         .toList()
       ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
 
-    return ListView(
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
         // Header
@@ -740,6 +813,8 @@ class _MyReviewsTab extends StatelessWidget {
             );
           }),
       ],
+        ),
+      ),
     );
   }
 }
@@ -772,7 +847,11 @@ class _AnalyticsTab extends StatelessWidget {
         ? allProjects.map((p) => p.rating).reduce((a, b) => a + b) / allProjects.length
         : 0.0;
 
-    return ListView(
+    return Align(
+      alignment: Alignment.topCenter,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 1200),
+        child: ListView(
       padding: const EdgeInsets.all(16),
       children: [
         // Header
@@ -889,6 +968,8 @@ class _AnalyticsTab extends StatelessWidget {
           ),
         ),
       ],
+        ),
+      ),
     );
   }
 }
@@ -1507,6 +1588,7 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
     final user = widget.authService.currentUser;
     if (user == null) return;
 
+    // Create feedback object
     final feedback = feedback_models.ProjectFeedback(
       id: DateTime.now().millisecondsSinceEpoch.toString(),
       projectId: widget.project.id,
@@ -1517,6 +1599,7 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
       createdAt: DateTime.now(),
     );
 
+    // Save feedback to dedicated collection
     final success = await widget.projectService.addFeedback(
       widget.project.id,
       _commentController.text.trim(),
@@ -1524,10 +1607,16 @@ class _FeedbackDialogState extends State<_FeedbackDialog> {
     );
     
     if (success && mounted) {
-      // Update project status to needs revision
+      // Create updated feedback list
+      final updatedFeedbackList = List<feedback_models.ProjectFeedback>.from(widget.project.feedback)
+        ..add(feedback);
+
+      // Update project status to needs revision AND update the feedback list in the project document
       final updatedProject = widget.project.copyWith(
         status: ProjectStatus.needsRevision,
+        feedback: updatedFeedbackList,
       );
+      
       await widget.projectService.updateProject(
         updatedProject,
         approverId: user.id,

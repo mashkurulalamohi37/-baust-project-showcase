@@ -1,4 +1,5 @@
 import 'dart:io';
+import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
 import 'package:firebase_core/firebase_core.dart';
@@ -8,6 +9,7 @@ import '../models/review.dart';
 import '../models/team_member.dart';
 import '../models/feedback.dart' as feedback_models;
 import 'notification_service.dart';
+import 'package:projectshowcase/services/cloudinary_service.dart';
 
 class FirestoreService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(
@@ -543,6 +545,7 @@ class FirestoreService {
         'authorId': project.authorId,
         'authorName': project.authorName,
         'category': project.category.name,
+        'customCategory': project.customCategory,
         'year': project.year,
         'semester': project.semester.name,
         'supervisor': project.supervisor,
@@ -584,87 +587,101 @@ class FirestoreService {
   static Future<List<Project>> getAllProjects() async {
     try {
       final query = await _firestore.collection(_projectsCollection).get();
-      return query.docs.map((doc) {
-        final data = doc.data();
-        return Project(
-          id: data['id'],
-          title: data['title'],
-          abstract: data['abstract'],
-          authorId: data['authorId'],
-          authorName: data['authorName'],
-          category: ProjectCategory.values.firstWhere(
-            (e) => e.name == data['category'],
-          ),
-          year: data['year'],
-          semester: data['semester'] != null
-              ? Semester.values.firstWhere(
-                  (e) => e.name == data['semester'],
-                  orElse: () => Semester.summer,
-                )
-              : Semester.summer,
-          supervisor: data['supervisor'],
-          githubUrl: data['githubUrl'],
-          imageUrls: List<String>.from(data['imageUrls'] ?? []),
-          // Filter out local file paths - only keep valid HTTP/HTTPS URLs
-          pdfUrl:
-              data['pdfUrl'] != null &&
-                  data['pdfUrl'].toString().isNotEmpty &&
-                  (data['pdfUrl'].toString().startsWith('http://') ||
-                      data['pdfUrl'].toString().startsWith('https://'))
-              ? data['pdfUrl']
-              : null,
-          status: ProjectStatus.values.firstWhere(
-            (e) => e.name == data['status'],
-          ),
-          rating: (data['rating'] ?? 0.0).toDouble(),
-          reviewCount: data['reviewCount'] ?? 0,
-          createdAt: DateTime.parse(data['createdAt']),
-          updatedAt: DateTime.parse(data['updatedAt']),
-          feedback:
-              (data['feedback'] as List<dynamic>?)
-                  ?.map((f) => feedback_models.ProjectFeedback.fromMap(f))
-                  .toList() ??
-              [],
-          projectType: data['projectType'] != null
-              ? ProjectType.values.firstWhere(
-                  (e) => e.name == data['projectType'],
-                  orElse: () => ProjectType.project,
-                )
-              : ProjectType.project,
-          isGroupProject: data['isGroupProject'] ?? false,
-          groupName: data['groupName'],
-          teamMembers: (data['teamMembers'] as List<dynamic>?)
-                  ?.map((m) => TeamMember.fromMap(m))
-                  .toList() ??
-              [],
-          driveLink: data['driveLink'],
-          youtubeUrl: data['youtubeUrl'],
-          studentId: data['studentId'],
-          batch: data['batch'],
-          level: data['level'],
-          term: data['term'],
-          award: data['award'] != null
-              ? ProjectAward.values.firstWhere(
-                  (e) => e.name == data['award'],
-                  orElse: () => ProjectAward.none,
-                )
-              : ProjectAward.none,
-          submissionType: data['submissionType'] != null
-              ? ProjectSubmissionType.values.firstWhere(
-                  (e) => e.name == data['submissionType'],
-                  orElse: () => ProjectSubmissionType.projectShowcase,
-                )
-              : ProjectSubmissionType.projectShowcase,
-          academicCourse: data['academicCourse'] != null
-              ? AcademicCourse.values.firstWhere(
-                  (e) => e.name == data['academicCourse'],
-                  orElse: () => AcademicCourse.softwareDevelopmentProject1,
-                )
-              : null,
-          assistantTeacherId: data['assistantTeacherId'],
-          rejectionReason: data['rejectionReason'],
-        );
-      }).toList();
+      final projects = <Project>[];
+      for (final doc in query.docs) {
+        try {
+          final data = doc.data();
+          projects.add(Project(
+            id: data['id'],
+            title: data['title'],
+            abstract: data['abstract'],
+            authorId: data['authorId'],
+            authorName: data['authorName'],
+            category: ProjectCategory.values.firstWhere(
+              (e) => e.name == data['category'],
+              orElse: () => ProjectCategory.other,
+            ),
+            customCategory: data['customCategory'], // Helper: _optionalString(data, 'customCategory')
+            year: data['year'],
+            semester: data['semester'] != null
+                ? Semester.values.firstWhere(
+                    (e) => e.name == data['semester'],
+                    orElse: () => Semester.summer,
+                  )
+                : Semester.summer,
+            supervisor: data['supervisor'],
+            githubUrl: data['githubUrl'],
+            imageUrls: List<String>.from(data['imageUrls'] ?? []),
+            // Filter out local file paths - only keep valid HTTP/HTTPS URLs
+            pdfUrl:
+                data['pdfUrl'] != null &&
+                    data['pdfUrl'].toString().isNotEmpty &&
+                    (data['pdfUrl'].toString().startsWith('http://') ||
+                        data['pdfUrl'].toString().startsWith('https://'))
+                ? data['pdfUrl']
+                : null,
+            status: ProjectStatus.values.firstWhere(
+              (e) => e.name == data['status'],
+              orElse: () => ProjectStatus.pending,
+            ),
+            rating: (data['rating'] ?? 0.0).toDouble(),
+            reviewCount: data['reviewCount'] ?? 0,
+            createdAt: _parseDateOrNow(data['createdAt']),
+            updatedAt: _parseDateOrNow(data['updatedAt']),
+            feedback:
+                (data['feedback'] as List<dynamic>?)
+                    ?.map((f) => feedback_models.ProjectFeedback.fromMap(f))
+                    .toList() ??
+                [],
+            projectType: data['projectType'] != null
+                ? ProjectType.values.firstWhere(
+                    (e) => e.name == data['projectType'],
+                    orElse: () => ProjectType.project,
+                  )
+                : ProjectType.project,
+            isGroupProject: data['isGroupProject'] ?? false,
+            groupName: data['groupName'],
+            teamMembers: (data['teamMembers'] as List<dynamic>?)
+                    ?.map((m) => TeamMember.fromMap(m))
+                    .toList() ??
+                [],
+            driveLink: data['driveLink'],
+            youtubeUrl: data['youtubeUrl'],
+            studentId: data['studentId'],
+            batch: data['batch'],
+            level: data['level'],
+            term: data['term'],
+            award: data['award'] != null
+                ? ProjectAward.values.firstWhere(
+                    (e) => e.name == data['award'],
+                    orElse: () => ProjectAward.none,
+                  )
+                : ProjectAward.none,
+            submissionType: data['submissionType'] != null
+                ? ProjectSubmissionType.values.firstWhere(
+                    (e) => e.name == data['submissionType'],
+                    orElse: () => ProjectSubmissionType.projectShowcase,
+                  )
+                : ProjectSubmissionType.projectShowcase,
+            academicCourse: data['academicCourse'] != null
+                ? AcademicCourse.values.firstWhere(
+                    (e) => e.name == data['academicCourse'],
+                    orElse: () => AcademicCourse.softwareDevelopmentProject1,
+                  )
+                : null,
+            assistantTeacherId: data['assistantTeacherId'],
+            rejectionReason: data['rejectionReason'],
+            showcaseMark: (data['showcaseMark'] ?? 0.0).toDouble(),
+            evaluations: (data['evaluations'] as List<dynamic>?)
+                    ?.map((e) => ShowcaseEvaluation.fromMap(e))
+                    .toList() ??
+                [],
+          ));
+        } catch (e) {
+          print('FirestoreService: Skipping invalid project doc ${doc.id}: $e');
+        }
+      }
+      return projects;
     } catch (e) {
       print('ERROR: Failed to get all projects: $e');
       return [];
@@ -710,90 +727,101 @@ class FirestoreService {
           ? await orderedQuery.limit(limit).get()
           : await orderedQuery.get();
 
-      return snapshot.docs.map((doc) {
-        final data = doc.data();
-        return Project(
-          id: data['id'] ?? doc.id,
-          title: data['title'] ?? '',
-          abstract: data['abstract'] ?? '',
-          authorId: data['authorId'] ?? '',
-          authorName: data['authorName'] ?? '',
-          category: ProjectCategory.values.firstWhere(
-            (e) => e.name == data['category'],
-            orElse: () => ProjectCategory.other,
-          ),
-
-          year: data['year'] ?? DateTime.now().year,
-          semester: data['semester'] != null
-              ? Semester.values.firstWhere(
-                  (e) => e.name == data['semester'],
-                  orElse: () => Semester.summer,
-                )
-              : Semester.summer,
-          supervisor: data['supervisor'],
-          status: ProjectStatus.values.firstWhere(
-            (e) => e.name == data['status'],
-            orElse: () => ProjectStatus.pending,
-          ),
-          rating: (data['rating'] ?? 0.0).toDouble(),
-          reviewCount: data['reviewCount'] ?? 0,
-          imageUrls: List<String>.from(data['imageUrls'] ?? []),
-          pdfUrl: data['pdfUrl'],
-          githubUrl: data['githubUrl'],
-          tags: List<String>.from(data['tags'] ?? []),
-          isFeatured: data['isFeatured'] ?? false,
-          facultyId: data['facultyId'],
-          facultyName: data['facultyName'],
-          version: data['version'] ?? 1,
-          parentProjectId: data['parentProjectId'],
-          projectType: data['projectType'] != null
-              ? ProjectType.values.firstWhere(
-                  (e) => e.name == data['projectType'],
-                  orElse: () => ProjectType.project,
-                )
-              : ProjectType.project,
-          createdAt: DateTime.parse(data['createdAt']),
-          updatedAt: DateTime.parse(data['updatedAt']),
-          feedback:
-              (data['feedback'] as List<dynamic>?)
-                  ?.map((f) => feedback_models.ProjectFeedback.fromMap(f))
-                  .toList() ??
-              [],
-          versions: const [],
-          isGroupProject: data['isGroupProject'] ?? false,
-          groupName: data['groupName'],
-          teamMembers: (data['teamMembers'] as List<dynamic>?)
-                  ?.map((m) => TeamMember.fromMap(m))
-                  .toList() ??
-              [],
-          driveLink: data['driveLink'],
-          youtubeUrl: data['youtubeUrl'],
-          studentId: data['studentId'],
-          batch: data['batch'],
-          level: data['level'],
-          term: data['term'],
-          award: data['award'] != null
-              ? ProjectAward.values.firstWhere(
-                  (e) => e.name == data['award'],
-                  orElse: () => ProjectAward.none,
-                )
-              : ProjectAward.none,
-          submissionType: data['submissionType'] != null
-              ? ProjectSubmissionType.values.firstWhere(
-                  (e) => e.name == data['submissionType'],
-                  orElse: () => ProjectSubmissionType.projectShowcase,
-                )
-              : ProjectSubmissionType.projectShowcase,
-          academicCourse: data['academicCourse'] != null
-              ? AcademicCourse.values.firstWhere(
-                  (e) => e.name == data['academicCourse'],
-                  orElse: () => AcademicCourse.softwareDevelopmentProject1,
-                )
-              : null,
-          assistantTeacherId: data['assistantTeacherId'],
-          rejectionReason: data['rejectionReason'],
-        );
-      }).toList();
+      final projects = <Project>[];
+      for (final doc in snapshot.docs) {
+        try {
+          final data = doc.data();
+          projects.add(Project(
+            id: data['id'] ?? doc.id,
+            title: data['title'] ?? '',
+            abstract: data['abstract'] ?? '',
+            authorId: data['authorId'] ?? '',
+            authorName: data['authorName'] ?? '',
+            category: ProjectCategory.values.firstWhere(
+              (e) => e.name == data['category'],
+              orElse: () => ProjectCategory.other,
+            ),
+            customCategory: data['customCategory'],
+            year: data['year'] ?? DateTime.now().year,
+            semester: data['semester'] != null
+                ? Semester.values.firstWhere(
+                    (e) => e.name == data['semester'],
+                    orElse: () => Semester.summer,
+                  )
+                : Semester.summer,
+            supervisor: data['supervisor'],
+            status: ProjectStatus.values.firstWhere(
+              (e) => e.name == data['status'],
+              orElse: () => ProjectStatus.pending,
+            ),
+            rating: (data['rating'] ?? 0.0).toDouble(),
+            reviewCount: data['reviewCount'] ?? 0,
+            imageUrls: List<String>.from(data['imageUrls'] ?? []),
+            pdfUrl: data['pdfUrl'],
+            githubUrl: data['githubUrl'],
+            tags: List<String>.from(data['tags'] ?? []),
+            isFeatured: data['isFeatured'] ?? false,
+            facultyId: data['facultyId'],
+            facultyName: data['facultyName'],
+            version: data['version'] ?? 1,
+            parentProjectId: data['parentProjectId'],
+            projectType: data['projectType'] != null
+                ? ProjectType.values.firstWhere(
+                    (e) => e.name == data['projectType'],
+                    orElse: () => ProjectType.project,
+                  )
+                : ProjectType.project,
+            createdAt: _parseDateOrNow(data['createdAt']),
+            updatedAt: _parseDateOrNow(data['updatedAt']),
+            feedback:
+                (data['feedback'] as List<dynamic>?)
+                    ?.map((f) => feedback_models.ProjectFeedback.fromMap(f))
+                    .toList() ??
+                [],
+            versions: const [],
+            isGroupProject: data['isGroupProject'] ?? false,
+            groupName: data['groupName'],
+            teamMembers: (data['teamMembers'] as List<dynamic>?)
+                    ?.map((m) => TeamMember.fromMap(m))
+                    .toList() ??
+                [],
+            driveLink: data['driveLink'],
+            youtubeUrl: data['youtubeUrl'],
+            studentId: data['studentId'],
+            batch: data['batch'],
+            level: data['level'],
+            term: data['term'],
+            award: data['award'] != null
+                ? ProjectAward.values.firstWhere(
+                    (e) => e.name == data['award'],
+                    orElse: () => ProjectAward.none,
+                  )
+                : ProjectAward.none,
+            submissionType: data['submissionType'] != null
+                ? ProjectSubmissionType.values.firstWhere(
+                    (e) => e.name == data['submissionType'],
+                    orElse: () => ProjectSubmissionType.projectShowcase,
+                  )
+                : ProjectSubmissionType.projectShowcase,
+            academicCourse: data['academicCourse'] != null
+                ? AcademicCourse.values.firstWhere(
+                    (e) => e.name == data['academicCourse'],
+                    orElse: () => AcademicCourse.softwareDevelopmentProject1,
+                  )
+                : null,
+            assistantTeacherId: data['assistantTeacherId'],
+            rejectionReason: data['rejectionReason'],
+            showcaseMark: (data['showcaseMark'] ?? 0.0).toDouble(),
+            evaluations: (data['evaluations'] as List<dynamic>?)
+                    ?.map((e) => ShowcaseEvaluation.fromMap(e))
+                    .toList() ??
+                [],
+          ));
+        } catch (e) {
+          print('FirestoreService: Skipping invalid project doc ${doc.id}: $e');
+        }
+      }
+      return projects;
     } catch (e) {
       print('ERROR: Failed to get projects: $e');
       return [];
@@ -888,6 +916,11 @@ class FirestoreService {
             : null,
         assistantTeacherId: data['assistantTeacherId'],
         rejectionReason: data['rejectionReason'],
+        showcaseMark: (data['showcaseMark'] ?? 0.0).toDouble(),
+        evaluations: (data['evaluations'] as List<dynamic>?)
+                ?.map((e) => ShowcaseEvaluation.fromMap(e))
+                .toList() ??
+            [],
       );
     } catch (e) {
       print('ERROR: Failed to get project by id: $e');
@@ -941,6 +974,8 @@ class FirestoreService {
         'term': project.term,
         'award': project.award.name,
         'rejectionReason': project.rejectionReason,
+        'showcaseMark': project.showcaseMark,
+        'evaluations': project.evaluations.map((e) => e.toMap()).toList(),
       });
       print('Project updated successfully: ${project.title} (version: ${project.version}, isFeatured: ${project.isFeatured}, facultyId: ${project.facultyId})');
     } catch (e) {
@@ -1180,106 +1215,89 @@ class FirestoreService {
   }
 
   // File upload operations
-  static Future<String> uploadFile(String path, String fileName) async {
+  static Future<String?> uploadFile(String path, String fileName, {Uint8List? data}) async {
     try {
-      // Check if file exists
-      final file = File(path);
-      if (!await file.exists()) {
-        throw Exception('File not found: $path');
-      }
-
       print('FirestoreService: ========== UPLOAD START ==========');
-      print('FirestoreService: Uploading file to Firebase Storage');
-      print('FirestoreService: File path: $path');
-      print('FirestoreService: File exists: ${await file.exists()}');
-      print('FirestoreService: File size: ${await file.length()} bytes');
-      print('FirestoreService: Storage path: uploads/$fileName');
-      print('FirestoreService: Storage instance: $_storage');
-
-      final ref = _storage.ref().child('uploads/$fileName');
-      print('FirestoreService: Storage reference created: ${ref.fullPath}');
-      print('FirestoreService: Starting file upload...');
-
-      final uploadTask = ref.putFile(file);
-      print('FirestoreService: Upload task created, waiting for completion...');
-
-      await uploadTask;
-      print('FirestoreService: File upload successful!');
-
-      print('FirestoreService: Getting download URL...');
-      final url = await ref.getDownloadURL();
-      print('FirestoreService: Download URL obtained: $url');
-      print('FirestoreService: ========== UPLOAD SUCCESS ==========');
-      return url;
-    } on FirebaseException catch (e) {
-      String errorMessage = 'Failed to upload file';
-      print(
-        'ERROR: Firebase Storage exception - Code: ${e.code}, Message: ${e.message}',
-      );
-      print('ERROR: Stack trace: ${e.stackTrace}');
-
-      if (e.code == 'unauthorized' || e.code == 'permission-denied') {
-        errorMessage =
-            'Permission denied. Please check Firebase Storage rules allow uploads to the uploads/ folder.';
-      } else if (e.code == 'bucket-not-found' || e.code == 'object-not-found') {
-        errorMessage =
-            'Storage bucket not found. Please create a Firebase Storage bucket in Firebase Console.';
-      } else if (e.code == 'unauthenticated') {
-        errorMessage = 'Authentication required. Please log in and try again.';
-      } else if (e.code == 'canceled') {
-        errorMessage = 'Upload was canceled. Please try again.';
-      } else {
-        errorMessage =
-            'Upload failed: ${e.message ?? e.code}. Please check Firebase Storage configuration.';
+      print('FirestoreService: Uploading file to Cloudinary');
+      
+      final cloudinary = CloudinaryService();
+      
+      // Determine resource type from file extension
+      String resourceType = 'auto';
+      if (fileName.toLowerCase().endsWith('.pdf')) {
+        resourceType = 'raw';
+      } else if (fileName.toLowerCase().endsWith('.jpg') || 
+                 fileName.toLowerCase().endsWith('.png') || 
+                 fileName.toLowerCase().endsWith('.jpeg') ||
+                 fileName.toLowerCase().endsWith('.gif') ||
+                 fileName.toLowerCase().endsWith('.webp')) {
+        resourceType = 'image';
       }
-      print('ERROR: Throwing exception with message: $errorMessage');
-      throw Exception(errorMessage);
-    } catch (e, stackTrace) {
-      print('ERROR: Failed to upload file: $e');
-      print('ERROR: Stack trace: $stackTrace');
-      rethrow;
+      
+      print('FirestoreService: Resource type: $resourceType');
+      print('FirestoreService: File name: $fileName');
+      
+      // Upload to Cloudinary
+      final url = await cloudinary.uploadFile(
+        path,
+        resourceType: resourceType,
+        folder: 'projectshowcase',
+        bytes: data,
+      );
+      
+      if (url != null) {
+        print('FirestoreService: Upload successful: $url');
+        print('FirestoreService: ========== UPLOAD SUCCESS ==========');
+        return url;
+      } else {
+        print('FirestoreService: Upload failed - no URL returned');
+        print('FirestoreService: ========== UPLOAD FAILED ==========');
+        return null;
+      }
+    } catch (e) {
+      print('FirestoreService: Error uploading file to Cloudinary: $e');
+      print('FirestoreService: ========== UPLOAD ERROR ==========');
+      return null;
     }
   }
 
   static Future<List<String>> uploadMultipleFiles(
     List<String> paths,
-    String folder,
-  ) async {
+    String folder, {
+    List<Uint8List>? dataList,
+  }) async {
     try {
+      final cloudinary = CloudinaryService();
       final urls = <String>[];
-      for (int i = 0; i < paths.length; i++) {
-        // Check if file exists
-        final file = File(paths[i]);
-        if (!await file.exists()) {
-          throw Exception('File not found: ${paths[i]}');
+      
+      if (dataList != null && dataList.isNotEmpty) {
+        // Web: Upload from bytes
+        for (int i = 0; i < dataList.length; i++) {
+          final fileName = '${folder}_${DateTime.now().millisecondsSinceEpoch}_$i';
+          final url = await cloudinary.uploadFile(
+            fileName,
+            resourceType: 'auto',
+            folder: 'projectshowcase/$folder',
+            bytes: dataList[i],
+          );
+          if (url != null) urls.add(url);
         }
-
-        final fileName =
-            '${folder}_${DateTime.now().millisecondsSinceEpoch}_$i';
-        final ref = _storage.ref().child('uploads/$folder/$fileName');
-        await ref.putFile(file);
-        final url = await ref.getDownloadURL();
-        urls.add(url);
-      }
-      return urls;
-    } on FirebaseException catch (e) {
-      String errorMessage = 'Failed to upload files';
-      if (e.code == 'unauthorized' || e.code == 'permission-denied') {
-        errorMessage =
-            'Permission denied. Please check Firebase Storage rules allow uploads.';
-      } else if (e.code == 'bucket-not-found' || e.code == 'object-not-found') {
-        errorMessage =
-            'Storage bucket not found. Please create a Firebase Storage bucket.';
-      } else if (e.code == 'unauthenticated') {
-        errorMessage = 'Authentication required. Please log in and try again.';
       } else {
-        errorMessage = 'Upload failed: ${e.message ?? e.code}';
+        // Mobile: Upload from file paths
+        for (final path in paths) {
+          final url = await cloudinary.uploadFile(
+            path,
+            resourceType: 'auto',
+            folder: 'projectshowcase/$folder',
+          );
+          if (url != null) urls.add(url);
+        }
       }
-      print('ERROR: Firebase Storage error: ${e.code} - ${e.message}');
-      throw Exception(errorMessage);
+      
+      return urls;
     } catch (e) {
-      print('ERROR: Failed to upload multiple files: $e');
-      rethrow;
+      print('Error uploading multiple files to Cloudinary: $e');
+      return [];
     }
   }
 

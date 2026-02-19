@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'dart:typed_data';
 import 'dart:io';
 import '../models/project.dart';
 import '../models/review.dart';
@@ -7,6 +8,7 @@ import '../models/feedback.dart' as feedback_models;
 import 'firestore_service.dart';
 import 'notification_service.dart';
 import 'auth_service.dart';
+import '../../services/email_service.dart';
 
 class ProjectService extends ChangeNotifier {
   // Singleton instance so project data is shared app-wide
@@ -28,6 +30,7 @@ class ProjectService extends ChangeNotifier {
   List<Review> get reviews => List.unmodifiable(_reviews);
   List<String> get bookmarkedProjectIds => List.unmodifiable(_bookmarkedProjectIds);
   bool get isLoading => _isLoading;
+  String? get lastUploadError => _lastUploadError;
 
   List<Project> get featuredProjects => 
       _projects.where((p) => p.isFeatured && p.status != ProjectStatus.hidden && p.status != ProjectStatus.draft && p.status != ProjectStatus.rejected && p.status != ProjectStatus.pending && p.status != ProjectStatus.needsRevision).toList();
@@ -89,7 +92,7 @@ class ProjectService extends ChangeNotifier {
     await _loadProjects(force: true);
   }
 
-  Future<bool> createProject(Project project) async {
+  Future<bool> createProject(Project project, {Uint8List? pdfBytes, List<Uint8List>? imageBytes}) async {
     _setLoading(true);
     debugPrint('ProjectService: Starting project creation for ${project.title}');
     
@@ -114,16 +117,17 @@ class ProjectService extends ChangeNotifier {
       String? pdfUrl;
       
       // Upload PDF if provided
-      bool pdfUploadRequired = project.pdfUrl != null && project.pdfUrl!.isNotEmpty;
+      bool pdfUploadRequired = (project.pdfUrl != null && project.pdfUrl!.isNotEmpty) || pdfBytes != null;
       bool pdfUploadFailed = false;
       
       if (pdfUploadRequired) {
-        debugPrint('ProjectService: Uploading PDF file: ${project.pdfUrl}');
+        debugPrint('ProjectService: Uploading PDF file');
         try {
           debugPrint('ProjectService: Using Firebase Storage for PDF upload');
           pdfUrl = await FirestoreService.uploadFile(
-            project.pdfUrl!,
+            project.pdfUrl ?? '', // might be empty if bytes provided
             'projects/${project.id}/project_${DateTime.now().millisecondsSinceEpoch}.pdf',
+            data: pdfBytes,
           );
           if (pdfUrl != null) {
             debugPrint('ProjectService: PDF uploaded to Firebase: $pdfUrl');
@@ -139,7 +143,6 @@ class ProjectService extends ChangeNotifier {
           if (pdfUrl == null) {
             pdfUploadFailed = true;
             debugPrint('ProjectService: ERROR - Failed to upload PDF!');
-            debugPrint('ProjectService: PDF file path was: ${project.pdfUrl}');
             debugPrint('ProjectService: This means the PDF will not be accessible. Please check:');
             debugPrint('  1. Firebase Storage bucket exists and is configured');
             debugPrint('  2. Storage rules allow upload operations');
@@ -161,7 +164,7 @@ class ProjectService extends ChangeNotifier {
           }
         }
       } else {
-        debugPrint('ProjectService: No PDF to upload (pdfUrl is null or empty)');
+        debugPrint('ProjectService: No PDF to upload');
       }
       
       // If PDF upload failed, throw an error to prevent saving project
@@ -172,13 +175,14 @@ class ProjectService extends ChangeNotifier {
       }
       
       // Upload images if provided
-      if (project.imageUrls.isNotEmpty) {
-        debugPrint('ProjectService: Uploading ${project.imageUrls.length} image(s)');
+      if (project.imageUrls.isNotEmpty || (imageBytes != null && imageBytes.isNotEmpty)) {
+        debugPrint('ProjectService: Uploading image(s)');
         
         // Use Firebase Storage batch upload
         final uploadedUrls = await FirestoreService.uploadMultipleFiles(
           project.imageUrls,
           'projects/${project.id}',
+          dataList: imageBytes,
         );
         imageUrls.addAll(uploadedUrls);
         debugPrint('ProjectService: Uploaded ${uploadedUrls.length} images to Firebase');
@@ -212,9 +216,13 @@ class ProjectService extends ChangeNotifier {
         
         // Notify teachers of new project pending approval
         if (projectWithUrls.status == ProjectStatus.pending) {
+          // Don't await notifications to prevent hanging the UI if email service is slow
           final notificationService = NotificationService();
-          await notificationService.notifyTeachersNewProjectPending(projectWithUrls);
-          debugPrint('ProjectService: Notified teachers of new pending project');
+          notificationService.notifyTeachersNewProjectPending(projectWithUrls).then((_) {
+            debugPrint('ProjectService: Notified teachers of new pending project');
+          }).catchError((e) {
+            debugPrint('ProjectService: Failed to notify teachers: $e');
+          });
         }
         
         _setLoading(false);
@@ -278,6 +286,30 @@ class ProjectService extends ChangeNotifier {
         _projects.add(updatedProject);
       }
 
+      // Send email to teacher when assigned
+      if (approverId != null && approverId != originalProject.facultyId) {
+        try {
+          final teacher = await FirestoreService.getUser(approverId);
+          if (teacher != null) {
+            // CRITICAL: Verify this is actually a teacher before sending email
+            if (teacher.role == UserRole.teacher || teacher.role == UserRole.admin) {
+              await EmailService.sendTeacherAssignmentEmail(
+                teacherEmail: teacher.email,
+                teacherName: teacher.name,
+                projectTitle: updatedProject.title,
+                studentName: updatedProject.authorName,
+                submissionType: updatedProject.submissionType.displayName,
+              );
+              debugPrint('ProjectService: Teacher assignment email sent to ${teacher.email}');
+            } else {
+              debugPrint('ProjectService: Skipping email - User ${teacher.name} is not a teacher (role: ${teacher.role})');
+            }
+          }
+        } catch (e) {
+          debugPrint('Error sending teacher assignment email: $e');
+        }
+      }
+
       // Send notifications for status changes
       if (statusChanged) {
         await _sendStatusChangeNotifications(originalProject, updatedProject);
@@ -326,6 +358,79 @@ class ProjectService extends ChangeNotifier {
     }
   }
 
+  Future<bool> updateShowcaseEvaluation(String projectId, Map<String, double> criteria, String feedback) async {
+    _setLoading(true);
+    try {
+      final authService = AuthService();
+      final currentUser = authService.currentUser;
+      
+      if (currentUser == null) {
+        throw Exception('User not logged in');
+      }
+
+      // Fetch fresh project from Firestore to avoid overwriting other teachers' evaluations
+      // due to stale local state
+      final freshProject = await FirestoreService.getProjectById(projectId);
+      if (freshProject == null) {
+         throw Exception('Project not found');
+      }
+
+      // Calculate total mark from criteria
+      double totalCriteria = 0;
+      if (criteria.isNotEmpty) {
+        criteria.forEach((_, value) => totalCriteria += value);
+      }
+      // Calculate average (assuming all criteria are out of 10, and we want a final mark out of 10)
+      // If criteria is empty, mark is 0.
+      double mark = criteria.isEmpty ? 0 : totalCriteria / criteria.length;
+
+      // Create new evaluation
+      final evaluation = ShowcaseEvaluation(
+        teacherId: currentUser.id,
+        teacherName: currentUser.name,
+        mark: mark,
+        criteria: criteria,
+        feedback: feedback,
+        updatedAt: DateTime.now(),
+      );
+
+      // Update evaluations list from the FRESH project
+      List<ShowcaseEvaluation> updatedEvaluations = List.from(freshProject.evaluations);
+      
+      // Remove existing evaluation by this teacher if exists
+      updatedEvaluations.removeWhere((e) => e.teacherId == currentUser.id);
+      
+      // Add new evaluation
+      updatedEvaluations.add(evaluation);
+
+      // Calculate average mark for the project
+      double totalMark = 0;
+      for (var e in updatedEvaluations) {
+        totalMark += e.mark;
+      }
+      double averageMark = updatedEvaluations.isEmpty ? 0 : totalMark / updatedEvaluations.length;
+
+      final updatedProject = freshProject.copyWith(
+        evaluations: updatedEvaluations,
+        showcaseMark: averageMark, // Keep showcaseMark as average for sorting/display
+      );
+      
+      await FirestoreService.updateProject(updatedProject);
+      
+      final index = _projects.indexWhere((p) => p.id == projectId);
+      if (index != -1) {
+        _projects[index] = updatedProject;
+        notifyListeners();
+      }
+      _setLoading(false);
+      return true;
+    } catch (e) {
+      debugPrint('Error updating showcase evaluation: $e');
+      _setLoading(false);
+      return false;
+    }
+  }
+
   Future<void> _sendStatusChangeNotifications(Project originalProject, Project updatedProject) async {
     final notificationService = NotificationService();
     
@@ -340,6 +445,23 @@ class ProjectService extends ChangeNotifier {
         teacherName,
         updatedProject.status,
       );
+      
+      // Send email when project is approved
+      if (updatedProject.status == ProjectStatus.approved) {
+        try {
+          final student = await FirestoreService.getUser(updatedProject.authorId);
+          if (student != null) {
+            await EmailService.sendProjectApprovalEmail(
+              studentEmail: student.email,
+              studentName: student.name,
+              projectTitle: updatedProject.title,
+              teacherName: teacherName,
+            );
+          }
+        } catch (e) {
+          debugPrint('Error sending project approval email: $e');
+        }
+      }
     }
   }
 
