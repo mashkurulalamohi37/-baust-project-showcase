@@ -385,14 +385,34 @@
       localStorage.setItem('install-remind-later', threeDaysFromNow.toString());
     }
 
-    // Service Worker Registration
+    // Service Worker Registration with Update Handling
     if ('serviceWorker' in navigator) {
-      window.addEventListener('load', () => {
-        navigator.serviceWorker.register('flutter_service_worker.js?v=4172794435')
-          .then(registration => {
+      window.addEventListener('load', function () {
+        // Add timestamp to force update service worker file
+        var serviceWorkerUrl = 'flutter_service_worker.js?v=' + new Date().getTime();
+
+        navigator.serviceWorker.register(serviceWorkerUrl)
+          .then(function (registration) {
             console.log('Service Worker registered successfully:', registration.scope);
+
+            // Check for updates
+            registration.onupdatefound = function () {
+              var installingWorker = registration.installing;
+              installingWorker.onstatechange = function () {
+                if (installingWorker.state === 'installed') {
+                  if (navigator.serviceWorker.controller) {
+                    // New content is available
+                    console.log('New content is available; please refresh.');
+                    // Trigger a reload or notify user here if needed
+                    // For now we'll just log
+                  } else {
+                    console.log('Content is cached for offline use.');
+                  }
+                }
+              };
+            };
           })
-          .catch(error => {
+          .catch(function (error) {
             console.log('Service Worker registration failed:', error);
           });
       });
