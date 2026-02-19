@@ -205,22 +205,29 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
           body: AnimatedBuilder(
             animation: _projectService,
             builder: (context, child) {
-              if (_projectService.isLoading) {
-                return const Center(child: CircularProgressIndicator());
-              }
-
-              return IndexedStack(
-                index: _selectedIndex,
+              return Stack(
                 children: [
-                  _ExploreTab(
-                    projectService: _projectService, 
-                    authService: _authService,
-                    announcementService: _announcementService,
+                  IndexedStack(
+                    index: _selectedIndex,
+                    children: [
+                      _ExploreTab(
+                        projectService: _projectService, 
+                        authService: _authService,
+                        announcementService: _announcementService,
+                      ),
+                      _UploadTab(projectService: _projectService, authService: _authService),
+                      _MyProjectsTab(projectService: _projectService, authService: _authService),
+                      _BookmarksTab(projectService: _projectService, authService: _authService),
+                      const SemesterArchiveScreen(),
+                    ],
                   ),
-                  _UploadTab(projectService: _projectService, authService: _authService),
-                  _MyProjectsTab(projectService: _projectService, authService: _authService),
-                  _BookmarksTab(projectService: _projectService, authService: _authService),
-                  const SemesterArchiveScreen(),
+                  if (_projectService.isLoading)
+                    Container(
+                      color: Colors.black.withOpacity(0.1),
+                      child: const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
                 ],
               );
             },
@@ -231,7 +238,7 @@ class _StudentDashboardScreenState extends State<StudentDashboardScreen> {
   }
 }
 
-class _ExploreTab extends StatelessWidget {
+class _ExploreTab extends StatefulWidget {
   const _ExploreTab({
     required this.projectService, 
     required this.authService,
@@ -242,30 +249,37 @@ class _ExploreTab extends StatelessWidget {
   final AnnouncementService announcementService;
 
   @override
+  State<_ExploreTab> createState() => _ExploreTabState();
+}
+
+class _ExploreTabState extends State<_ExploreTab> {
+  late Stream<List<Announcement>> _announcementStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _announcementStream = widget.announcementService.getActiveAnnouncementsStream();
+  }
+
+  @override
   Widget build(BuildContext context) {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
         // Announcements Section
-        AnimatedBuilder(
-          animation: announcementService,
-          builder: (context, _) {
-            final activeAnnouncements = announcementService.getActiveAnnouncementsStream();
-            return StreamBuilder<List<Announcement>>(
-              stream: activeAnnouncements,
-              builder: (context, snapshot) {
-                if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
-                
-                return Center(
-                  child: ConstrainedBox(
-                    constraints: const BoxConstraints(maxWidth: 1200),
-                    child: Padding(
-                      padding: const EdgeInsets.only(bottom: 24),
-                      child: AnnouncementCarousel(announcements: snapshot.data!),
-                    ),
-                  ),
-                );
-              },
+        StreamBuilder<List<Announcement>>(
+          stream: _announcementStream,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
+            
+            return Center(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1200),
+                child: Padding(
+                  padding: const EdgeInsets.only(bottom: 24),
+                  child: AnnouncementCarousel(announcements: snapshot.data!),
+                ),
+              ),
             );
           },
         ),
@@ -318,7 +332,7 @@ class _ExploreTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        if (projectService.featuredProjects.isEmpty)
+        if (widget.projectService.featuredProjects.isEmpty)
           const Card(
             child: Padding(
               padding: EdgeInsets.all(32),
@@ -334,10 +348,10 @@ class _ExploreTab extends StatelessWidget {
             ),
           )
         else
-          ...projectService.featuredProjects.take(3).map((project) => _ProjectCard(
+          ...widget.projectService.featuredProjects.take(3).map((project) => _ProjectCard(
             project: project,
-            projectService: projectService,
-            authService: authService,
+            projectService: widget.projectService,
+            authService: widget.authService,
             onTap: () => _openProjectDetail(context, project),
           )),
 
@@ -351,7 +365,7 @@ class _ExploreTab extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 12),
-        if (projectService.projects.isEmpty)
+        if (widget.projectService.projects.isEmpty)
           const Card(
             child: Padding(
               padding: EdgeInsets.all(32),
@@ -367,13 +381,13 @@ class _ExploreTab extends StatelessWidget {
             ),
           )
         else
-          ...projectService.projects
+          ...widget.projectService.projects
               .where((p) => p.status == ProjectStatus.approved)
               .take(5)
               .map((project) => _ProjectCard(
                     project: project,
-                    projectService: projectService,
-                    authService: authService,
+                    projectService: widget.projectService,
+                    authService: widget.authService,
                     onTap: () => _openProjectDetail(context, project),
                   )),
       ],
@@ -385,8 +399,8 @@ class _ExploreTab extends StatelessWidget {
       MaterialPageRoute<void>(
         builder: (_) => ProjectDetailScreen(
           project: project,
-          projectService: projectService,
-          authService: AuthService(),
+          projectService: widget.projectService,
+          authService: widget.authService,
         ),
       ),
     );

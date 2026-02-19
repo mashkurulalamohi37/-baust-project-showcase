@@ -2462,23 +2462,34 @@ class _AnnouncementManagementTabState extends State<_AnnouncementManagementTab> 
                             const SizedBox(height: 8),
                             Text(announcement.content),
                             const SizedBox(height: 8),
-                            Row(
+                            Wrap(
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              spacing: 16,
+                              runSpacing: 4,
                               children: [
-                                Icon(Icons.access_time, size: 14, color: Theme.of(context).disabledColor),
-                                const SizedBox(width: 4),
-                                Text(
-                                  DateFormat('MMM d, y h:mm a').format(announcement.createdAt),
-                                  style: Theme.of(context).textTheme.bodySmall,
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.access_time, size: 14, color: Theme.of(context).disabledColor),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      DateFormat('MMM d, y h:mm a').format(announcement.createdAt),
+                                      style: Theme.of(context).textTheme.bodySmall,
+                                    ),
+                                  ],
                                 ),
-                                if (announcement.expiresAt != null) ...[
-                                  const SizedBox(width: 16),
-                                  Icon(Icons.event_busy, size: 14, color: Theme.of(context).disabledColor),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'Expires: ${DateFormat('MMM d, y').format(announcement.expiresAt!)}',
-                                    style: Theme.of(context).textTheme.bodySmall,
+                                if (announcement.expiresAt != null)
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.event_busy, size: 14, color: Theme.of(context).disabledColor),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        'Expires: ${DateFormat('MMM d, y').format(announcement.expiresAt!)}',
+                                        style: Theme.of(context).textTheme.bodySmall,
+                                      ),
+                                    ],
                                   ),
-                                ],
                               ],
                             ),
                           ],

@@ -202,24 +202,31 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
         body: AnimatedBuilder(
           animation: Listenable.merge([_projectService, _authService]),
           builder: (context, child) {
-            if (_projectService.isLoading) {
-              return const Center(child: CircularProgressIndicator());
-            }
-
-            return IndexedStack(
-              index: _selectedIndex,
-              children: [
-                _ReviewTab(
-                  projectService: _projectService, 
-                  authService: _authService,
-                  announcementService: _announcementService,
-                ),
-                _AllProjectsTab(projectService: _projectService, authService: _authService),
-                _MyReviewsTab(projectService: _projectService, authService: _authService),
-                _AnalyticsTab(projectService: _projectService, authService: _authService),
-                const SemesterArchiveScreen(),
-              ],
-            );
+              return Stack(
+                children: [
+                  IndexedStack(
+                    index: _selectedIndex,
+                    children: [
+                      _ReviewTab(
+                        projectService: _projectService, 
+                        authService: _authService,
+                        announcementService: _announcementService,
+                      ),
+                      _AllProjectsTab(projectService: _projectService, authService: _authService),
+                      _MyReviewsTab(projectService: _projectService, authService: _authService),
+                      _AnalyticsTab(projectService: _projectService, authService: _authService),
+                      const SemesterArchiveScreen(),
+                    ],
+                  ),
+                  if (_projectService.isLoading)
+                    Container(
+                      color: Colors.black.withOpacity(0.1),
+                      child: const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
+                ],
+              );
           },
         ),
       ),
@@ -242,9 +249,12 @@ class _ReviewTab extends StatefulWidget {
 }
 
 class _ReviewTabState extends State<_ReviewTab> {
+  late Stream<List<Announcement>> _announcementStream;
+
   @override
   void initState() {
     super.initState();
+    _announcementStream = widget.announcementService.getActiveAnnouncementsStream();
     // Listen to project service changes
     widget.projectService.addListener(_onProjectServiceChanged);
   }
@@ -282,20 +292,14 @@ class _ReviewTabState extends State<_ReviewTab> {
       padding: const EdgeInsets.all(16),
       children: [
         // Announcements Section
-        AnimatedBuilder(
-          animation: widget.announcementService,
-          builder: (context, _) {
-            final activeAnnouncements = widget.announcementService.getActiveAnnouncementsStream();
-            return StreamBuilder<List<Announcement>>(
-              stream: activeAnnouncements,
-              builder: (context, snapshot) {
-                if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
-                
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 24),
-                  child: AnnouncementCarousel(announcements: snapshot.data!),
-                );
-              },
+        StreamBuilder<List<Announcement>>(
+          stream: _announcementStream,
+          builder: (context, snapshot) {
+            if (!snapshot.hasData || snapshot.data!.isEmpty) return const SizedBox.shrink();
+            
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 24),
+              child: AnnouncementCarousel(announcements: snapshot.data!),
             );
           },
         ),

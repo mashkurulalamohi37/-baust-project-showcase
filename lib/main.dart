@@ -1713,13 +1713,15 @@ class _ProjectCard extends StatelessWidget {
                     backgroundColor: scheme.secondaryContainer,
                     labelStyle: TextStyle(color: scheme.onSecondaryContainer),
                   ),
-                  if (project.facultyName != null && project.facultyName!.isNotEmpty)
+                  if (project.status == ProjectStatus.approved && project.facultyName != null && project.facultyName!.isNotEmpty)
                     Chip(
-                      label: Text(
-                        project.status == ProjectStatus.approved
-                            ? 'Approved by: ${project.facultyName}'
-                            : 'Supervisor: ${project.facultyName}',
-                      ),
+                      label: Text('Approved by: ${project.facultyName}'),
+                      backgroundColor: scheme.tertiaryContainer,
+                      labelStyle: TextStyle(color: scheme.onTertiaryContainer),
+                    )
+                  else if (project.supervisor != null && project.supervisor!.isNotEmpty)
+                    Chip(
+                      label: Text('Supervisor: ${project.supervisor}'),
                       backgroundColor: scheme.tertiaryContainer,
                       labelStyle: TextStyle(color: scheme.onTertiaryContainer),
                     ),

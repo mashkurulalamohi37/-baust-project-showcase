@@ -103,7 +103,7 @@ class _AnnouncementCarouselState extends State<AnnouncementCarousel> {
     return Column(
       children: [
         SizedBox(
-          height: 180,
+          height: 150, // Reduced from 180
           child: PageView.builder(
             controller: _pageController,
             onPageChanged: (index) {
@@ -136,7 +136,7 @@ class _AnnouncementCarouselState extends State<AnnouncementCarousel> {
                       ),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.all(12), // Reduced from 16
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -292,24 +292,20 @@ class _AnnouncementCarouselState extends State<AnnouncementCarousel> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          DateFormat('MMMM d, y • h:mm a').format(announcement.createdAt),
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: Colors.grey[600],
-                          ),
-                        ),
-                        if (announcement.authorName.isNotEmpty)
-                          Text(
-                            'Posted by ${announcement.authorName}',
-                            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: Colors.grey[600],
-                            ),
-                          ),
-                      ],
+                    Text(
+                      DateFormat('MMMM d, y • h:mm a').format(announcement.createdAt),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey[600],
+                      ),
                     ),
+                    const SizedBox(height: 4), // Added vertical spacing
+                    if (announcement.authorName.isNotEmpty)
+                      Text(
+                        'Posted by ${announcement.authorName}',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.grey[600],
+                        ),
+                      ),
                     const Divider(height: 32),
                     Text(
                       announcement.content,
