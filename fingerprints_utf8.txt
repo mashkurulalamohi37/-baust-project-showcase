@@ -1,0 +1,26 @@
+﻿Alias name: upload
+Creation date: Feb 20, 2026
+Entry type: PrivateKeyEntry
+Certificate chain length: 1
+Certificate[1]:
+Owner: CN=BAUST Projects, OU=CSE, O=BAUST, L=Saidpur, ST=Rangpur, C=BD
+Issuer: CN=BAUST Projects, OU=CSE, O=BAUST, L=Saidpur, ST=Rangpur, C=BD
+Serial number: 2e28228f816dafd7
+Valid from: Fri Feb 20 01:27:52 BDT 2026 until: Tue Jul 08 01:27:52 BDT 2053
+Certificate fingerprints:
+	 SHA1: D0:CA:C1:29:74:CD:D0:C7:8E:64:45:75:72:1C:E3:78:91:CE:C8:EE
+	 SHA256: 5D:01:66:BB:95:81:00:EA:7C:6C:49:98:78:C0:73:A2:E9:83:E7:32:10:C6:F9:59:BA:04:13:31:36:14:58:F8
+Signature algorithm name: SHA384withRSA
+Subject Public Key Algorithm: 2048-bit RSA key
+Version: 3
+
+Extensions: 
+
+#1: ObjectId: 2.5.29.14 Criticality=false
+SubjectKeyIdentifier [
+KeyIdentifier [
+0000: 66 87 37 97 2D 12 13 10   F5 62 37 D1 F8 09 52 CD  f.7.-....b7...R.
+0010: 09 53 A4 74                                        .S.t
+]
+]
+
