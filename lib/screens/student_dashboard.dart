@@ -1276,6 +1276,54 @@ class _UploadTabState extends State<_UploadTab> {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                _submissionType = ProjectSubmissionType.hardware;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                              decoration: BoxDecoration(
+                                color: _submissionType == ProjectSubmissionType.hardware
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _submissionType == ProjectSubmissionType.hardware
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.outline,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.memory,
+                                    size: 24,
+                                    color: _submissionType == ProjectSubmissionType.hardware
+                                        ? Theme.of(context).colorScheme.onPrimary
+                                        : Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Hardware',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: _submissionType == ProjectSubmissionType.hardware
+                                          ? Theme.of(context).colorScheme.onPrimary
+                                          : Theme.of(context).colorScheme.onSurface,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                     if (_submissionType == ProjectSubmissionType.academic) ...[

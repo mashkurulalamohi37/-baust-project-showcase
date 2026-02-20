@@ -31,10 +31,10 @@ class ExportService {
     for (var project in projects) {
       // For group projects, list all member IDs and names
       final studentNames = project.isGroupProject
-          ? project.teamMembers.map((m) => m.name).join(' | ')
+          ? project.teamMembers.map((m) => m.name).join(', ')
           : project.authorName;
       final studentIds = project.isGroupProject
-          ? project.teamMembers.map((m) => '="${m.id}"').join(' | ')
+          ? project.teamMembers.map((m) => m.id).join(', ')
           : (project.studentId?.isNotEmpty == true ? '="${project.studentId!}"' : 'N/A');
 
       rows.add([

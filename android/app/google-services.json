@@ -22,6 +22,14 @@
           }
         },
         {
+          "client_id": "279672202046-s6dfr47hsjf6iln4r5v4ub45djlshdna.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "bd.edu.baust.projects",
+            "certificate_hash": "3df33bea458e583e04a4da7660a4d0735794f9b9"
+          }
+        },
+        {
           "client_id": "279672202046-8t6j868337v67mf8m8a2ceqjer0e4d0m.apps.googleusercontent.com",
           "client_type": 3
         }

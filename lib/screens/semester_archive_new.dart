@@ -185,6 +185,22 @@ class _SemesterArchiveScreenState extends State<SemesterArchiveScreen> {
                         'Course projects, thesis work, and academic research.',
                       ),
                       // Add extra padding at bottom to ensure last card is fully visible/touchable above nav bar/safe area if needed
+                      const SizedBox(height: 16),
+                      _buildSelectionCard(
+                        'Hardware Projects',
+                        Icons.memory_outlined,
+                        const LinearGradient(
+                          colors: [
+                            Color(0xFF1A1A2E),
+                            Color(0xFF16213E),
+                          ], // Deep dark blue
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        () => _selectSubmissionType(
+                            ProjectSubmissionType.hardware),
+                        'Embedded systems, IoT builds, robotics, and circuit projects.',
+                      ),
                       const SizedBox(height: 40),
                     ],
                   ),

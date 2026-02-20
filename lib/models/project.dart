@@ -374,6 +374,7 @@ extension FeedbackTypeExtension on FeedbackType {
 enum ProjectSubmissionType {
   projectShowcase,
   academic,
+  hardware,
 }
 
 extension ProjectSubmissionTypeExtension on ProjectSubmissionType {
@@ -383,6 +384,8 @@ extension ProjectSubmissionTypeExtension on ProjectSubmissionType {
         return 'Project Showcase';
       case ProjectSubmissionType.academic:
         return 'Academic';
+      case ProjectSubmissionType.hardware:
+        return 'Hardware Project';
     }
   }
 }

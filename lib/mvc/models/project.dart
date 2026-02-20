@@ -285,6 +285,7 @@ enum ProjectAward {
 enum ProjectSubmissionType {
   projectShowcase,
   academic,
+  hardware,
 }
 
 enum AcademicCourse {
@@ -304,6 +305,8 @@ extension ProjectSubmissionTypeExtension on ProjectSubmissionType {
         return 'Project Showcase';
       case ProjectSubmissionType.academic:
         return 'Academic';
+      case ProjectSubmissionType.hardware:
+        return 'Hardware Project';
     }
   }
 }
