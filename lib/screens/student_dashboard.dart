@@ -1690,29 +1690,7 @@ class _UploadTabState extends State<_UploadTab> {
               const SizedBox(height: 16),
             ],
 
-            // Hardware-specific fields
-            if (_selectedProjectType == ProjectType.hardware) ...[
-              TextFormField(
-                controller: _driveLinkController,
-                decoration: const InputDecoration(
-                  labelText: 'Circuit Diagram / Documentation Link',
-                  hintText: 'https://drive.google.com/... or any documentation link',
-                  prefixIcon: Icon(Icons.schema_outlined),
-                  helperText: 'Link to circuit diagram, schematics, or project documentation',
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _youtubeLinkController,
-                decoration: const InputDecoration(
-                  labelText: 'Demo Video (YouTube)',
-                  hintText: 'https://youtube.com/watch?v=...',
-                  prefixIcon: Icon(Icons.play_circle_outline),
-                  helperText: 'Optional: YouTube video showing the hardware in action',
-                ),
-              ),
-              const SizedBox(height: 16),
-            ],
+
 
             // Team Configuration Section
             Text(
