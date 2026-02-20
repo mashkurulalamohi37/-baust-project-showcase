@@ -84,7 +84,6 @@ class AnnouncementService extends ChangeNotifier {
   Stream<List<Announcement>> getActiveAnnouncementsStream() {
     return _firestore
         .collection(_collection)
-        .where('isVisible', isEqualTo: true)
         .orderBy('createdAt', descending: true)
         .snapshots()
         .map((snapshot) {
@@ -93,14 +92,15 @@ class AnnouncementService extends ChangeNotifier {
         data['id'] = doc.id;
         return Announcement.fromMap(data);
       }).where((a) {
-        // Double check expiration locally
+        // Filter visible only
+        if (!(a.isVisible)) return false;
+        // Filter expired
         if (a.expiresAt == null) return true;
-        // Treat expiration date as inclusive (valid until end of that day)
         final expirationEndContext = DateTime(
-          a.expiresAt!.year, 
-          a.expiresAt!.month, 
-          a.expiresAt!.day, 
-          23, 59, 59
+          a.expiresAt!.year,
+          a.expiresAt!.month,
+          a.expiresAt!.day,
+          23, 59, 59,
         );
         return expirationEndContext.isAfter(DateTime.now());
       }).toList();
