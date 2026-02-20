@@ -1277,53 +1277,6 @@ class _UploadTabState extends State<_UploadTab> {
                           ),
                         ),
                         const SizedBox(width: 12),
-                        Expanded(
-                          child: InkWell(
-                            onTap: () {
-                              setState(() {
-                                _submissionType = ProjectSubmissionType.hardware;
-                              });
-                            },
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
-                              decoration: BoxDecoration(
-                                color: _submissionType == ProjectSubmissionType.hardware
-                                    ? Theme.of(context).colorScheme.primary
-                                    : Theme.of(context).colorScheme.surface,
-                                borderRadius: BorderRadius.circular(12),
-                                border: Border.all(
-                                  color: _submissionType == ProjectSubmissionType.hardware
-                                      ? Theme.of(context).colorScheme.primary
-                                      : Theme.of(context).colorScheme.outline,
-                                  width: 2,
-                                ),
-                              ),
-                              child: Column(
-                                children: [
-                                  Icon(
-                                    Icons.memory,
-                                    size: 24,
-                                    color: _submissionType == ProjectSubmissionType.hardware
-                                        ? Theme.of(context).colorScheme.onPrimary
-                                        : Theme.of(context).colorScheme.onSurface,
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    'Hardware',
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.bold,
-                                      color: _submissionType == ProjectSubmissionType.hardware
-                                          ? Theme.of(context).colorScheme.onPrimary
-                                          : Theme.of(context).colorScheme.onSurface,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
                       ],
                     ),
                     if (_submissionType == ProjectSubmissionType.academic) ...[
@@ -1509,6 +1462,64 @@ class _UploadTabState extends State<_UploadTab> {
                             ),
                           ),
                         ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () {
+                              setState(() {
+                                _selectedProjectType = ProjectType.hardware;
+                              });
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                              decoration: BoxDecoration(
+                                color: _selectedProjectType == ProjectType.hardware
+                                    ? Theme.of(context).colorScheme.primary
+                                    : Theme.of(context).colorScheme.surface,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _selectedProjectType == ProjectType.hardware
+                                      ? Theme.of(context).colorScheme.primary
+                                      : Theme.of(context).colorScheme.outline,
+                                  width: 2,
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.memory,
+                                    size: 24,
+                                    color: _selectedProjectType == ProjectType.hardware
+                                        ? Theme.of(context).colorScheme.onPrimary
+                                        : Theme.of(context).colorScheme.onSurface,
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Hardware',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.bold,
+                                      color: _selectedProjectType == ProjectType.hardware
+                                          ? Theme.of(context).colorScheme.onPrimary
+                                          : Theme.of(context).colorScheme.onSurface,
+                                    ),
+                                  ),
+                                  if (_selectedProjectType == ProjectType.hardware)
+                                    const SizedBox(height: 2),
+                                  if (_selectedProjectType == ProjectType.hardware)
+                                    Text(
+                                      'IoT, Circuits',
+                                      style: TextStyle(
+                                        fontSize: 10,
+                                        color: Theme.of(context).colorScheme.onPrimary.withOpacity(0.8),
+                                      ),
+                                      textAlign: TextAlign.center,
+                                    ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ],
@@ -1559,13 +1570,24 @@ class _UploadTabState extends State<_UploadTab> {
             ),
             const SizedBox(height: 16),
 
-              DropdownButtonFormField<ProjectCategory>(
+            DropdownButtonFormField<ProjectCategory>(
               decoration: const InputDecoration(
                 labelText: 'Category',
                 prefixIcon: Icon(Icons.category),
               ),
               value: _selectedCategory,
-              items: ProjectCategory.values.map((category) => DropdownMenuItem(
+              items: (_selectedProjectType == ProjectType.hardware
+                  ? [
+                      ProjectCategory.iot,
+                      ProjectCategory.engineering,
+                      ProjectCategory.energy,
+                      ProjectCategory.ar,
+                      ProjectCategory.security,
+                      ProjectCategory.ai,
+                      ProjectCategory.other,
+                    ]
+                  : ProjectCategory.values
+              ).map((category) => DropdownMenuItem(
                 value: category,
                 child: Text(category.displayName),
               )).toList(),
@@ -1645,9 +1667,8 @@ class _UploadTabState extends State<_UploadTab> {
             ),
             const SizedBox(height: 16),
 
-            // GitHub URL — only for software projects (not hardware)
-            if (_selectedProjectType == ProjectType.project &&
-                _submissionType != ProjectSubmissionType.hardware) ...[
+            // GitHub URL — only for software project type (not hardware/thesis)
+            if (_selectedProjectType == ProjectType.project) ...[
               TextFormField(
                 controller: _githubController,
                 decoration: const InputDecoration(
@@ -1657,13 +1678,11 @@ class _UploadTabState extends State<_UploadTab> {
                   helperText: 'Link to your project repository',
                 ),
                 validator: (value) {
-                  if (_submissionType != ProjectSubmissionType.hardware) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter GitHub URL';
-                    }
-                    if (!value.toLowerCase().contains('github.com')) {
-                      return 'Please enter a valid GitHub URL';
-                    }
+                  if (value == null || value.trim().isEmpty) {
+                    return 'Please enter GitHub URL';
+                  }
+                  if (!value.toLowerCase().contains('github.com')) {
+                    return 'Please enter a valid GitHub URL';
                   }
                   return null;
                 },
@@ -1672,7 +1691,7 @@ class _UploadTabState extends State<_UploadTab> {
             ],
 
             // Hardware-specific fields
-            if (_submissionType == ProjectSubmissionType.hardware) ...[
+            if (_selectedProjectType == ProjectType.hardware) ...[
               TextFormField(
                 controller: _driveLinkController,
                 decoration: const InputDecoration(

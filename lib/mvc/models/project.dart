@@ -256,6 +256,7 @@ enum ProjectCategory {
 enum ProjectType {
   project,
   thesis,
+  hardware,
 }
 
 enum Semester {
@@ -285,7 +286,6 @@ enum ProjectAward {
 enum ProjectSubmissionType {
   projectShowcase,
   academic,
-  hardware,
 }
 
 enum AcademicCourse {
@@ -305,8 +305,6 @@ extension ProjectSubmissionTypeExtension on ProjectSubmissionType {
         return 'Project Showcase';
       case ProjectSubmissionType.academic:
         return 'Academic';
-      case ProjectSubmissionType.hardware:
-        return 'Hardware Project';
     }
   }
 }
@@ -339,6 +337,8 @@ extension ProjectTypeExtension on ProjectType {
         return 'Project';
       case ProjectType.thesis:
         return 'Thesis';
+      case ProjectType.hardware:
+        return 'Hardware';
     }
   }
 }
