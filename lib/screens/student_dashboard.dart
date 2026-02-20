@@ -2171,7 +2171,7 @@ class _UploadTabState extends State<_UploadTab> {
                                 : 'PDF Selected'),
                           ),
                         ),
-                        if (_selectedProjectType == ProjectType.project) ...[
+                        if (_selectedProjectType == ProjectType.project || _selectedProjectType == ProjectType.hardware) ...[
                           const SizedBox(width: 12),
                           Expanded(
                             child: OutlinedButton.icon(
