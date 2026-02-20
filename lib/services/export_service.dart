@@ -34,8 +34,8 @@ class ExportService {
           ? project.teamMembers.map((m) => m.name).join(' | ')
           : project.authorName;
       final studentIds = project.isGroupProject
-          ? project.teamMembers.map((m) => m.id).join(' | ')
-          : (project.studentId?.isNotEmpty == true ? project.studentId! : 'N/A');
+          ? project.teamMembers.map((m) => '="${m.id}"').join(' | ')
+          : (project.studentId?.isNotEmpty == true ? '="${project.studentId!}"' : 'N/A');
 
       rows.add([
         project.title,
