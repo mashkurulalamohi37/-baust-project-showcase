@@ -24,18 +24,23 @@ class ExportService {
       'Status',
       'Submission Type',
       'Course',
+      'Project Type',
     ]);
 
     // Data Rows
     for (var project in projects) {
+      // For group projects, list all member IDs and names
+      final studentNames = project.isGroupProject
+          ? project.teamMembers.map((m) => m.name).join(' | ')
+          : project.authorName;
+      final studentIds = project.isGroupProject
+          ? project.teamMembers.map((m) => m.id).join(' | ')
+          : (project.studentId?.isNotEmpty == true ? project.studentId! : 'N/A');
+
       rows.add([
         project.title,
-        project.isGroupProject 
-            ? project.teamMembers.map((m) => m.name).join(', ') 
-            : project.authorName,
-        project.isGroupProject 
-            ? project.teamMembers.map((m) => m.id).join(', ') 
-            : project.authorId,
+        studentNames,
+        studentIds,
         project.facultyName ?? 'N/A',
         project.semester.displayName,
         project.year,
@@ -43,6 +48,7 @@ class ExportService {
         project.status.displayName,
         project.submissionType.displayName,
         project.academicCourse?.displayName ?? 'N/A',
+        project.isGroupProject ? (project.groupName ?? 'Group') : 'Individual',
       ]);
     }
 

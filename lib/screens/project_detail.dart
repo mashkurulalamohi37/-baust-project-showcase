@@ -1098,7 +1098,22 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   }
 
   void _openPdf(String pdfUrl) async {
-    // Show loading dialog first
+    // On web, open PDF directly in browser (SfPdfViewer fails with CORS)
+    if (kIsWeb) {
+      final uri = Uri.tryParse(pdfUrl);
+      if (uri != null && uri.hasScheme) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Invalid PDF URL.')),
+          );
+        }
+      }
+      return;
+    }
+
+    // Show loading dialog first (mobile only)
     showDialog(
       context: context,
       barrierDismissible: false,
