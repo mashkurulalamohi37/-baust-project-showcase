@@ -1645,7 +1645,9 @@ class _UploadTabState extends State<_UploadTab> {
             ),
             const SizedBox(height: 16),
 
-            if (_selectedProjectType == ProjectType.project) ...[
+            // GitHub URL — only for software projects (not hardware)
+            if (_selectedProjectType == ProjectType.project &&
+                _submissionType != ProjectSubmissionType.hardware) ...[
               TextFormField(
                 controller: _githubController,
                 decoration: const InputDecoration(
@@ -1655,15 +1657,40 @@ class _UploadTabState extends State<_UploadTab> {
                   helperText: 'Link to your project repository',
                 ),
                 validator: (value) {
-                  if (value == null || value.trim().isEmpty) {
-                    return 'Please enter GitHub URL';
-                  }
-                  // Basic validation
-                  if (!value.toLowerCase().contains('github.com')) {
-                     return 'Please enter a valid GitHub URL';
+                  if (_submissionType != ProjectSubmissionType.hardware) {
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Please enter GitHub URL';
+                    }
+                    if (!value.toLowerCase().contains('github.com')) {
+                      return 'Please enter a valid GitHub URL';
+                    }
                   }
                   return null;
                 },
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Hardware-specific fields
+            if (_submissionType == ProjectSubmissionType.hardware) ...[
+              TextFormField(
+                controller: _driveLinkController,
+                decoration: const InputDecoration(
+                  labelText: 'Circuit Diagram / Documentation Link',
+                  hintText: 'https://drive.google.com/... or any documentation link',
+                  prefixIcon: Icon(Icons.schema_outlined),
+                  helperText: 'Link to circuit diagram, schematics, or project documentation',
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _youtubeLinkController,
+                decoration: const InputDecoration(
+                  labelText: 'Demo Video (YouTube)',
+                  hintText: 'https://youtube.com/watch?v=...',
+                  prefixIcon: Icon(Icons.play_circle_outline),
+                  helperText: 'Optional: YouTube video showing the hardware in action',
+                ),
               ),
               const SizedBox(height: 16),
             ],
