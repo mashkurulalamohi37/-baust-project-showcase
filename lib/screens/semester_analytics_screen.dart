@@ -398,25 +398,26 @@ class _TableHeader extends StatelessWidget {
       ),
       child: Row(
         children: [
-          Expanded(flex: 4, child: Text('Semester', style: style)),
+          Expanded(flex: 5, child: Text('Semester', style: style)),
           Expanded(
-              flex: 2,
-              child: Text('✅ OK',
+              flex: 3,
+              child: Text('✅ Approved',
                   style: style?.copyWith(color: Colors.green.shade600),
                   textAlign: TextAlign.center)),
           Expanded(
-              flex: 2,
-              child: Text('❌ Rej',
+              flex: 3,
+              child: Text('❌ Rejected',
                   style: style?.copyWith(color: Colors.red.shade600),
                   textAlign: TextAlign.center)),
           Expanded(
-              flex: 2,
-              child: Text('⏳ Pend',
+              flex: 3,
+              child: Text('⏳ Pending',
                   style: style?.copyWith(color: Colors.orange.shade700),
                   textAlign: TextAlign.center)),
           Expanded(
               flex: 2,
-              child: Text('Total', style: style, textAlign: TextAlign.center)),
+              child: Text('Total',
+                  style: style, textAlign: TextAlign.center)),
         ],
       ),
     );
@@ -466,7 +467,7 @@ class _TableRow extends StatelessWidget {
                   children: [
                     if (record.projectCount > 0)
                       _TypeChip(
-                          label: '${record.projectCount} Proj',
+                          label: '${record.projectCount} Projects',
                           color: Colors.blue.shade400),
                     if (record.thesisCount > 0)
                       _TypeChip(
@@ -474,7 +475,7 @@ class _TableRow extends StatelessWidget {
                           color: Colors.purple.shade400),
                     if (record.hardwareCount > 0)
                       _TypeChip(
-                          label: '${record.hardwareCount} HW',
+                          label: '${record.hardwareCount} Hardware',
                           color: Colors.teal.shade400),
                   ],
                 ),
@@ -482,20 +483,20 @@ class _TableRow extends StatelessWidget {
             ),
           ),
           Expanded(
-              flex: 2,
+              flex: 3,
               child: Text('${record.approved}',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Colors.green.shade600,
                       fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center)),
           Expanded(
-              flex: 2,
+              flex: 3,
               child: Text('${record.rejected}',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Colors.red.shade600, fontWeight: FontWeight.bold),
                   textAlign: TextAlign.center)),
           Expanded(
-              flex: 2,
+              flex: 3,
               child: Text('${record.pending}',
                   style: Theme.of(context).textTheme.bodyLarge?.copyWith(
                       color: Colors.orange.shade700,

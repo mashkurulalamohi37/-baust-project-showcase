@@ -545,12 +545,12 @@ class _ProjectFormState extends State<ProjectForm> {
                   ),
                   ButtonSegment(
                     value: ProjectType.thesis,
-                    label: Text('Thesis/Research Paper'),
+                    label: Text('Research Project'),
                     icon: Icon(Icons.menu_book),
                   ),
                   ButtonSegment(
                     value: ProjectType.hardware,
-                    label: Text('Hardware'),
+                    label: Text('Hardware Project'),
                     icon: Icon(Icons.memory),
                   ),
                 ],
