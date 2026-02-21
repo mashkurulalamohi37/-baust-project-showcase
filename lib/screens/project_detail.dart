@@ -13,6 +13,7 @@ import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../utils/youtube_web/youtube_web_shim.dart';
 import '../widgets/showcase_evaluation_card.dart';
 import 'student_portfolio_screen.dart';
+import 'project_form_screen.dart';
 
 class ProjectDetailScreen extends StatefulWidget {
   const ProjectDetailScreen({
@@ -287,9 +288,16 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                ),
                onPressed: _togglePinProject,
                tooltip: (widget.authService?.currentUser?.pinnedProjectIds?.contains(project.id) ?? false)
-                   ? 'Unpin from Profile'
-                   : 'Pin to Profile',
+                    ? 'Unpin from Profile'
+                    : 'Pin to Profile',
              ),
+          if (widget.authService?.currentUser?.id == project.authorId && 
+              project.status == ProjectStatus.pending)
+            IconButton(
+              icon: const Icon(Icons.edit, color: Colors.white),
+              onPressed: () => _openEditScreen(project),
+              tooltip: 'Edit Project',
+            ),
         ],
         iconTheme: const IconThemeData(color: Colors.white),
       ),
@@ -446,7 +454,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                    ? 'Unpin from Profile'
                    : 'Pin to Profile',
              ),
-
+          if (widget.authService?.currentUser?.id == project.authorId && 
+              project.status == ProjectStatus.pending)
+            IconButton(
+              icon: const Icon(Icons.edit),
+              onPressed: () => _openEditScreen(project),
+              tooltip: 'Edit Project',
+            ),
         ],
       ),
       body: Column(
@@ -1417,6 +1431,20 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error updating pin: $e'), backgroundColor: Colors.red));
       }
     }
+  }
+
+  void _openEditScreen(Project project) {
+    if (widget.authService?.currentUser == null) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ProjectFormScreen(
+          projectService: widget.projectService,
+          authService: widget.authService!,
+          initialProject: project,
+        ),
+      ),
+    );
   }
 
 

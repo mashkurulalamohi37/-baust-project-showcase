@@ -12,18 +12,44 @@ import 'notification_service.dart';
 import 'package:projectshowcase/services/cloudinary_service.dart';
 
 class FirestoreService {
-  static final FirebaseFirestore _firestore = FirebaseFirestore.instanceFor(
-    app: Firebase.app(),
-  );
-  static final FirebaseStorage _storage = FirebaseStorage.instanceFor(
-    bucket: 'projectshowcase-b2748.firebasestorage.app',
-  );
+  static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
   // Collection names
   static const String _usersCollection = 'users';
   static const String _projectsCollection = 'projects';
   static const String _reviewsCollection = 'reviews';
   static const String _bookmarksCollection = 'bookmarks';
+  static const String _systemConfigCollection = 'system_config';
+  static const String _otpsCollection = 'otps';
+
+  // System settings
+  static Future<Map<String, dynamic>> getSystemSettings() async {
+    try {
+      final doc = await _firestore.collection(_systemConfigCollection).doc('main').get();
+      if (!doc.exists) {
+        // Create default settings if not exists
+        final defaultSettings = {'autoApprovalEnabled': false};
+        await _firestore.collection(_systemConfigCollection).doc('main').set(defaultSettings);
+        return defaultSettings;
+      }
+      return doc.data()!;
+    } catch (e) {
+      print('ERROR: Failed to get system settings: $e');
+      return {'autoApprovalEnabled': false};
+    }
+  }
+
+  static Future<void> updateSystemSettings(Map<String, dynamic> settings) async {
+    try {
+      await _firestore.collection(_systemConfigCollection).doc('main').set(
+        settings,
+        SetOptions(merge: true),
+      );
+    } catch (e) {
+      print('ERROR: Failed to update system settings: $e');
+      rethrow;
+    }
+  }
 
   // Helper utilities for safely reading Firestore data
   static String _normalizeEmail(String value) => value.trim().toLowerCase();
@@ -504,6 +530,113 @@ class FirestoreService {
     } catch (e) {
       print('ERROR: Failed to delete user: $e');
       rethrow;
+    }
+  }
+
+  // Maintenance operations
+  static Future<void> deleteAllProjects() async {
+    final projects = await _firestore.collection(_projectsCollection).get();
+    final batch = _firestore.batch();
+    for (final doc in projects.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
+  static Future<void> deleteAllReviews() async {
+    final reviews = await _firestore.collection(_reviewsCollection).get();
+    final batch = _firestore.batch();
+    for (final doc in reviews.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
+  static Future<void> deleteAllBookmarks() async {
+    final bookmarks = await _firestore.collection(_bookmarksCollection).get();
+    final batch = _firestore.batch();
+    for (final doc in bookmarks.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
+  static Future<void> deleteAllAnnouncements() async {
+    final announcements = await _firestore.collection('announcements').get();
+    final batch = _firestore.batch();
+    for (final doc in announcements.docs) {
+      batch.delete(doc.reference);
+    }
+    await batch.commit();
+  }
+
+  static Future<void> resetDatabase({bool keepUsers = true}) async {
+    await deleteAllProjects();
+    await deleteAllReviews();
+    await deleteAllBookmarks();
+    await deleteAllAnnouncements();
+    
+    if (!keepUsers) {
+      final users = await _firestore.collection(_usersCollection).get();
+      final batch = _firestore.batch();
+      for (final doc in users.docs) {
+        final data = doc.data();
+        final role = data['role']?.toString().toLowerCase();
+        final email = data['email']?.toString().toLowerCase();
+        
+        // NEVER delete the main admin
+        if (role == 'admin' || email == 'ohi82@gmail.com') continue;
+        
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    }
+  }
+
+  // OTP Operations
+  static Future<void> saveOTP(String email, String otp) async {
+    try {
+      final normalizedEmail = _normalizeEmail(email);
+      await _firestore.collection(_otpsCollection).doc(normalizedEmail).set({
+        'email': normalizedEmail,
+        'otp': otp,
+        'createdAt': FieldValue.serverTimestamp(),
+        'expiresAt': Timestamp.fromDate(
+          DateTime.now().add(const Duration(minutes: 10)),
+        ),
+      });
+      print('OTP saved successfully for $normalizedEmail');
+    } catch (e) {
+      print('ERROR: Failed to save OTP: $e');
+      rethrow;
+    }
+  }
+
+  static Future<bool> verifyOTP(String email, String otp) async {
+    try {
+      final normalizedEmail = _normalizeEmail(email);
+      final doc = await _firestore.collection(_otpsCollection).doc(normalizedEmail).get();
+      
+      if (!doc.exists) return false;
+      
+      final data = doc.data()!;
+      final storedOtp = data['otp'] as String;
+      final expiresAt = (data['expiresAt'] as Timestamp).toDate();
+      
+      if (DateTime.now().isAfter(expiresAt)) {
+        await doc.reference.delete(); // Cleanup expired OTP
+        return false;
+      }
+      
+      if (storedOtp == otp) {
+        await doc.reference.delete(); // Use once and delete
+        return true;
+      }
+      
+      return false;
+    } catch (e) {
+      print('ERROR: Failed to verify OTP: $e');
+      return false;
     }
   }
 
@@ -1237,9 +1370,13 @@ class FirestoreService {
       print('FirestoreService: Resource type: $resourceType');
       print('FirestoreService: File name: $fileName');
       
+      // Use provided path on mobile, fallback to fileName on web
+      final actualPath = path.trim().isNotEmpty ? path : fileName;
+      print('FirestoreService: Actual path resolving to: $actualPath');
+
       // Upload to Cloudinary
       final url = await cloudinary.uploadFile(
-        path,
+        actualPath,
         resourceType: resourceType,
         folder: 'projectshowcase',
         bytes: data,
@@ -1304,11 +1441,11 @@ class FirestoreService {
   // Delete file from Firebase Storage
   static Future<void> deleteFile(String url) async {
     try {
-      final ref = _storage.refFromURL(url);
-      await ref.delete();
+      // Note: Cloudinary doesn't support unauthenticated frontend deletion 
+      // without a signature generation backend. Skipping for now.
+      print('FirestoreService: deleteFile is disabled for Cloudinary to prevent unauthorized deletions.');
     } catch (e) {
       print('ERROR: Failed to delete file: $e');
-      rethrow;
     }
   }
 

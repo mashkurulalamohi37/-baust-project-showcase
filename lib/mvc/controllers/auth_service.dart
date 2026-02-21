@@ -7,6 +7,8 @@ import 'package:google_sign_in/google_sign_in.dart';
 import '../models/user.dart';
 import 'firestore_service.dart';
 import 'notification_service.dart';
+import '../../services/email_service.dart';
+import 'dart:math' as math;
 
 // Web OAuth client ID for Google Sign-In
 const String _webClientId = '279672202046-8t6j868337v67mf8m8a2ceqjer0e4d0m.apps.googleusercontent.com';
@@ -795,12 +797,9 @@ class AuthService extends ChangeNotifier {
   Future<bool> deleteUser(String userId) async {
     try {
       _setLoading(true);
-      // Note: Firestore will handle cascade deletes via cloud functions if configured
-      final user = await FirestoreService.getUserById(userId);
-      if (user != null) {
-        final deactivatedUser = user.copyWith(isActive: false);
-        await FirestoreService.updateUser(deactivatedUser);
-      }
+      // Hard delete from Firestore
+      await FirestoreService.deleteUser(userId);
+      
       _setLoading(false);
       notifyListeners();
       return true;
@@ -810,6 +809,29 @@ class AuthService extends ChangeNotifier {
       debugPrint('AuthService: Error deleting user: $e');
       return false;
     }
+  }
+
+  // Maintenance: Reset system data
+  Future<bool> resetSystemData({bool keepUsers = true}) async {
+    try {
+      _setLoading(true);
+      await FirestoreService.resetDatabase(keepUsers: keepUsers);
+      _setLoading(false);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      _setLoading(false);
+      _errorMessage = 'Failed to reset system data: $e';
+      debugPrint('AuthService: Error resetting system data: $e');
+      return false;
+    }
+  }
+
+  // OTP Verification Methods
+  Future<bool> isEmailAvailable(String email) async {
+    final normalizedEmail = _normalizeEmail(email);
+    final user = await FirestoreService.getUserByEmail(normalizedEmail);
+    return user == null;
   }
 
   Future<void> _persistCurrentUser() async {

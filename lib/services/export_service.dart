@@ -22,9 +22,11 @@ class ExportService {
       'Year',
       'Category',
       'Status',
+      'Project Type',      // Thesis / Hardware / Project ✅
       'Submission Type',
       'Course',
-      'Project Type',
+      'Group/Individual',
+      'Group Name',
     ]);
 
     // Data Rows
@@ -35,7 +37,7 @@ class ExportService {
           : project.authorName;
       final studentIds = project.isGroupProject
           ? project.teamMembers.map((m) => m.id).join(', ')
-          : (project.studentId?.isNotEmpty == true ? '="${project.studentId!}"' : 'N/A');
+          : (project.studentId?.isNotEmpty == true ? '=\"${project.studentId!}\"' : 'N/A');
 
       rows.add([
         project.title,
@@ -46,9 +48,11 @@ class ExportService {
         project.year,
         project.category.displayName,
         project.status.displayName,
+        project.projectType.displayName,  // Thesis / Hardware / Project ✅
         project.submissionType.displayName,
         project.academicCourse?.displayName ?? 'N/A',
-        project.isGroupProject ? (project.groupName ?? 'Group') : 'Individual',
+        project.isGroupProject ? 'Group' : 'Individual',
+        project.isGroupProject ? (project.groupName ?? 'N/A') : 'N/A',
       ]);
     }
 

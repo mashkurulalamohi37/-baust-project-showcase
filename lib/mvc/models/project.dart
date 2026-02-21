@@ -334,9 +334,9 @@ extension ProjectTypeExtension on ProjectType {
   String get displayName {
     switch (this) {
       case ProjectType.project:
-        return 'Project';
+        return 'Software Project';
       case ProjectType.thesis:
-        return 'Thesis';
+        return 'Thesis/Research Paper';
       case ProjectType.hardware:
         return 'Hardware';
     }

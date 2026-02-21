@@ -445,10 +445,37 @@ class _SignupFormState extends State<_SignupForm> {
     if (_selectedRole == UserRole.admin) _selectedRole = UserRole.student;
   }
 
-  Future<void> _handleSignup() async {
+  Future<void> _initiateSignup() async {
+    debugPrint('AUTH.DART: _initiateSignup called!');
     if (!_formKey.currentState!.validate()) {
+      debugPrint('AUTH.DART: _initiateSignup validation failed!');
       return;
     }
+    
+    final email = _emailController.text.trim();
+    final name = _nameController.text.trim();
+
+    debugPrint('AUTH.DART: Checking if email is available: $email');
+    // 1. Check if email is already registered
+    final isAvailable = await widget.authService.isEmailAvailable(email);
+    if (!isAvailable) {
+      debugPrint('AUTH.DART: Email NOT available.');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('This email is already registered. Please login.'),
+            backgroundColor: Theme.of(context).colorScheme.error,
+          ),
+        );
+      }
+      return;
+    }
+
+    debugPrint('AUTH.DART: Proceeding to complete signup (OTP removed)...');
+    await _completeSignup();
+  }
+
+  Future<void> _completeSignup() async {
     try {
       final success = await widget.authService.signup(
         _nameController.text.trim(),
@@ -803,7 +830,7 @@ class _SignupFormState extends State<_SignupForm> {
                 SizedBox(
                   width: double.infinity,
                   child: FilledButton(
-                    onPressed: widget.authService.isLoading ? null : _handleSignup,
+                    onPressed: widget.authService.isLoading ? null : _initiateSignup,
                     style: FilledButton.styleFrom(
                       padding: const EdgeInsets.symmetric(vertical: 16),
                     ),

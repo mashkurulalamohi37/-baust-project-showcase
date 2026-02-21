@@ -5,6 +5,7 @@ import '../mvc/controllers/project_service.dart';
 import '../mvc/controllers/auth_service.dart';
 import 'project_detail.dart';
 import 'semester_archive_new.dart';
+import 'semester_analytics_screen.dart';
 import 'profile_settings_screen.dart';
 import '../mvc/controllers/notification_service.dart';
 import '../utils/responsive_layout.dart';
@@ -13,6 +14,8 @@ import 'notifications_screen.dart';
 import '../services/announcement_service.dart';
 import '../models/announcement.dart';
 import 'package:intl/intl.dart';
+import '../services/system_service.dart';
+import '../mvc/models/project.dart' as project_model;
 
 class AdminDashboardScreen extends StatefulWidget {
   const AdminDashboardScreen({super.key});
@@ -25,12 +28,16 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   final ProjectService _projectService = ProjectService();
   final AuthService _authService = AuthService();
   final NotificationService _notificationService = NotificationService();
+  final SystemService _systemService = SystemService();
   int _selectedIndex = 0;
+  String? _pendingUserFilter;
+  String? _pendingProjectFilter;
 
   @override
   void initState() {
     super.initState();
     _projectService.ensureProjectsLoaded();
+    _systemService.loadSettings();
     _loadNotifications();
   }
 
@@ -47,7 +54,13 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
     return ResponsiveDashboardLayout(
       title: const Text('Admin Dashboard'),
       selectedIndex: _selectedIndex,
-      onDestinationSelected: (int index) => setState(() => _selectedIndex = index),
+      onDestinationSelected: (int index) {
+        setState(() {
+          _selectedIndex = index;
+          _pendingUserFilter = null;
+          _pendingProjectFilter = null;
+        });
+      },
       userEmail: _authService.currentUser?.email,
       userRole: _authService.currentUser?.role.displayName,
       onLogout: () async {
@@ -145,6 +158,11 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           label: 'Projects',
         ),
         NavigationDestination(
+          icon: Icon(Icons.analytics_outlined),
+          selectedIcon: Icon(Icons.analytics),
+          label: 'Analytics',
+        ),
+        NavigationDestination(
           icon: Icon(Icons.settings_outlined),
           selectedIcon: Icon(Icons.settings),
           label: 'Settings',
@@ -163,7 +181,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
       body: AnimatedBuilder(
         animation: _projectService,
         builder: (context, child) {
-          if (_projectService.isLoading) {
+          if (_projectService.isLoading && _projectService.projects.isEmpty) {
             return const Center(child: CircularProgressIndicator());
           }
 
@@ -171,9 +189,29 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             index: _selectedIndex,
             children: [
               _OverviewTab(projectService: _projectService, authService: _authService),
-              _UserManagementTab(projectService: _projectService, authService: _authService),
-              _ProjectManagementTab(projectService: _projectService, authService: _authService),
-              _SystemSettingsTab(projectService: _projectService, authService: _authService),
+              _UserManagementTab(
+                projectService: _projectService, 
+                authService: _authService,
+                initialFilter: _pendingUserFilter,
+              ),
+              _ProjectManagementTab(
+                projectService: _projectService, 
+                authService: _authService,
+                initialQuery: _pendingProjectFilter,
+              ),
+              SemesterAnalyticsBody(projectService: _projectService),
+              _SystemSettingsTab(
+                projectService: _projectService, 
+                authService: _authService,
+                systemService: _systemService,
+                onNavigate: (index, {String? filter, String? query}) {
+                  setState(() {
+                    _selectedIndex = index;
+                    _pendingUserFilter = filter;
+                    _pendingProjectFilter = query;
+                  });
+                },
+              ),
               const SemesterArchiveScreen(),
               const _AnnouncementManagementTab(),
             ],
@@ -390,9 +428,14 @@ class _OverviewTabState extends State<_OverviewTab> {
 }
 
 class _UserManagementTab extends StatefulWidget {
-  const _UserManagementTab({required this.projectService, required this.authService});
+  const _UserManagementTab({
+    required this.projectService, 
+    required this.authService,
+    this.initialFilter,
+  });
   final ProjectService projectService;
   final AuthService authService;
+  final String? initialFilter;
 
   @override
   State<_UserManagementTab> createState() => _UserManagementTabState();
@@ -406,6 +449,9 @@ class _UserManagementTabState extends State<_UserManagementTab> {
   @override
   void initState() {
     super.initState();
+    if (widget.initialFilter != null) {
+      _selectedFilter = widget.initialFilter!;
+    }
     // Listen to auth service changes to refresh when roles change
     widget.authService.addListener(_onAuthServiceChanged);
   }
@@ -539,9 +585,14 @@ class _UserManagementTabState extends State<_UserManagementTab> {
 }
 
 class _ProjectManagementTab extends StatefulWidget {
-  const _ProjectManagementTab({required this.projectService, required this.authService});
+  const _ProjectManagementTab({
+    required this.projectService, 
+    required this.authService,
+    this.initialQuery,
+  });
   final ProjectService projectService;
   final AuthService authService;
+  final String? initialQuery;
 
   @override
   State<_ProjectManagementTab> createState() => _ProjectManagementTabState();
@@ -552,6 +603,15 @@ class _ProjectManagementTabState extends State<_ProjectManagementTab> {
   String _searchQuery = '';
   Semester? _selectedSemester;
   int? _selectedYear;
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialQuery != null) {
+      _searchQuery = widget.initialQuery!;
+      _searchController.text = _searchQuery;
+    }
+  }
 
   @override
   void dispose() {
@@ -574,6 +634,10 @@ class _ProjectManagementTabState extends State<_ProjectManagementTab> {
 
       if (_searchQuery.isEmpty) return true;
       final query = _searchQuery.toLowerCase();
+      
+      // Special support for "featured" query from settings
+      if (query == 'featured') return project.isFeatured;
+
       return project.title.toLowerCase().contains(query) ||
              project.authorName.toLowerCase().contains(query) ||
              (project.studentId?.toLowerCase().contains(query) ?? false);
@@ -731,9 +795,16 @@ class _ProjectManagementTabState extends State<_ProjectManagementTab> {
 }
 
 class _SystemSettingsTab extends StatelessWidget {
-  const _SystemSettingsTab({required this.projectService, required this.authService});
+  const _SystemSettingsTab({
+    required this.projectService, 
+    required this.authService,
+    required this.systemService,
+    required this.onNavigate,
+  });
   final ProjectService projectService;
   final AuthService authService;
+  final SystemService systemService;
+  final Function(int, {String? filter, String? query}) onNavigate;
 
   @override
   Widget build(BuildContext context) {
@@ -786,19 +857,19 @@ class _SystemSettingsTab extends StatelessWidget {
               icon: Icons.person_add,
               title: 'Teacher Approval',
               subtitle: 'Manage teacher registration approvals',
-              onTap: () {},
+              onTap: () => onNavigate(1, filter: 'Pending'),
             ),
             _SettingsItem(
               icon: Icons.security,
               title: 'Access Control',
               subtitle: 'Configure user permissions and roles',
-              onTap: () {},
+              onTap: () => onNavigate(1),
             ),
             _SettingsItem(
               icon: Icons.block,
               title: 'User Suspension',
               subtitle: 'Suspend or activate user accounts',
-              onTap: () {},
+              onTap: () => onNavigate(1),
             ),
           ],
         ),
@@ -811,19 +882,19 @@ class _SystemSettingsTab extends StatelessWidget {
               icon: Icons.auto_awesome,
               title: 'Auto-approval',
               subtitle: 'Configure automatic project approval',
-              onTap: () {},
+              onTap: () => _showAutoApprovalDialog(context),
             ),
             _SettingsItem(
               icon: Icons.star,
               title: 'Featured Projects',
               subtitle: 'Manage featured project settings',
-              onTap: () {},
+              onTap: () => onNavigate(2, query: 'featured'),
             ),
             _SettingsItem(
               icon: Icons.category,
               title: 'Categories',
               subtitle: 'Manage project categories',
-              onTap: () {},
+              onTap: () => _showCategoriesDialog(context),
             ),
           ],
         ),
@@ -836,24 +907,258 @@ class _SystemSettingsTab extends StatelessWidget {
               icon: Icons.backup,
               title: 'Backup & Restore',
               subtitle: 'Manage system backups',
-              onTap: () {},
+              onTap: () => _showBackupDialog(context),
             ),
             _SettingsItem(
               icon: Icons.analytics,
               title: 'Analytics',
               subtitle: 'View system analytics and reports',
-              onTap: () {},
+              onTap: () => _showAnalyticsDialog(context),
             ),
             _SettingsItem(
               icon: Icons.notifications,
               title: 'Notifications',
               subtitle: 'Configure system notifications',
-              onTap: () {},
+              onTap: () => onNavigate(6),
             ),
           ],
         ),
-      ],
+        const SizedBox(height: 16),
+
+        _SettingsSection(
+          title: 'Maintenance',
+          items: [
+            _SettingsItem(
+              icon: Icons.delete_forever,
+              title: 'Clean Database',
+              subtitle: 'Permanently remove projects, reviews, and dynamic data',
+              onTap: () => _showCleanDatabaseDialog(context),
+            ),
+          ],
         ),
+        const SizedBox(height: 32),
+      ],
+    ),
+      ),
+    );
+  }
+
+  void _showCleanDatabaseDialog(BuildContext context) {
+    bool includeUsers = false;
+    String confirmText = '';
+    bool isCleaning = false;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.red),
+              SizedBox(width: 8),
+              Text('Clean Database'),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This action will permanently delete:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 8),
+              const Text('• All Projects and attachments'),
+              const Text('• All Reviews and ratings'),
+              const Text('• All Announcements'),
+              const Text('• All Bookmarks'),
+              const SizedBox(height: 16),
+              CheckboxListTile(
+                title: const Text('Also delete all Users (excluding Admins)'),
+                subtitle: const Text('Students and Teachers will be removed'),
+                value: includeUsers,
+                onChanged: isCleaning ? null : (v) => setDialogState(() => includeUsers = v ?? false),
+                controlAffinity: ListTileControlAffinity.leading,
+                contentPadding: EdgeInsets.zero,
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'To confirm, type "DELETE" below:',
+                style: TextStyle(color: Colors.red, fontWeight: FontWeight.w500),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                onChanged: (v) => setDialogState(() => confirmText = v),
+                enabled: !isCleaning,
+                decoration: const InputDecoration(
+                  hintText: 'Type DELETE here',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: isCleaning ? null : () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: (confirmText == 'DELETE' && !isCleaning)
+                  ? () async {
+                      setDialogState(() => isCleaning = true);
+                      try {
+                        final success = await authService.resetSystemData(keepUsers: !includeUsers);
+                        if (context.mounted) {
+                          Navigator.of(context, rootNavigator: true).pop();
+                          if (success) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Database cleaned successfully'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                            // Refresh projects
+                            projectService.reloadProjects();
+                          } else {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to clean database: ${authService.errorMessage}'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          if (Navigator.canPop(context)) Navigator.pop(context);
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Error: $e'),
+                              backgroundColor: Colors.red,
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  : null,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.red,
+                foregroundColor: Colors.white,
+              ),
+              child: isCleaning
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Clean Now'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAutoApprovalDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AnimatedBuilder(
+        animation: systemService,
+        builder: (context, _) => AlertDialog(
+          title: const Text('Auto-approval Settings'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SwitchListTile(
+                title: const Text('Enable Auto-approval'),
+                subtitle: const Text('New projects will be approved automatically'),
+                value: systemService.autoApprovalEnabled,
+                onChanged: (v) => systemService.updateAutoApproval(v),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Close'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showCategoriesDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Project Categories'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              'Software',
+              'Hardware',
+              'Research',
+              'Other',
+            ].map((cat) => ListTile(
+              title: Text(cat),
+              trailing: const Icon(Icons.edit, size: 20),
+              onTap: () {},
+            )).toList(),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+          ElevatedButton(
+            onPressed: () {},
+            child: const Text('Add Category'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showBackupDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Backup & Restore'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('To backup your data:'),
+            SizedBox(height: 8),
+            Text('1. Go to Firebase Console'),
+            Text('2. Select "Cloud Firestore"'),
+            Text('3. Go to "Import/Export" tab'),
+            Text('4. Click "Export" to save to Google Cloud Storage'),
+            SizedBox(height: 16),
+            Text('Direct in-app backup is currently under development.',
+              style: TextStyle(fontStyle: FontStyle.italic, color: Colors.grey),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAnalyticsDialog(BuildContext context) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SemesterAnalyticsScreen(projectService: projectService),
       ),
     );
   }

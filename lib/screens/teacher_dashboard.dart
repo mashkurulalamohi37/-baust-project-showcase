@@ -6,10 +6,10 @@ import '../mvc/controllers/project_service.dart';
 import '../mvc/controllers/auth_service.dart';
 import 'project_detail.dart';
 import 'semester_archive_new.dart';
+import 'semester_analytics_screen.dart';
 import 'profile_settings_screen.dart';
 import '../mvc/controllers/notification_service.dart';
 import 'notifications_screen.dart';
-
 import 'package:flutter/services.dart';
 import 'package:fluttertoast/fluttertoast.dart';
 import '../utils/responsive_layout.dart';
@@ -830,151 +830,8 @@ class _AnalyticsTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final teacher = authService.currentUser;
-    final allProjects = projectService.projects
-        .where((project) => _isProjectVisibleToTeacher(project, teacher))
-        .toList();
-    final projectsByStatus = <ProjectStatus, List<Project>>{};
-    
-    for (final status in ProjectStatus.values) {
-      projectsByStatus[status] = projectService
-          .filterProjectsByStatus(status)
-          .where((project) => _isProjectVisibleToTeacher(project, teacher))
-          .toList();
-    }
-    
-    // Calculate featured projects count (projects with isFeatured flag or featured status)
-    final featuredCount = allProjects.where((p) => p.isFeatured || p.status == ProjectStatus.featured).length;
-
-    final totalReviews = projectService.reviews.length;
-    final averageRating = allProjects.isNotEmpty
-        ? allProjects.map((p) => p.rating).reduce((a, b) => a + b) / allProjects.length
-        : 0.0;
-
-    return Align(
-      alignment: Alignment.topCenter,
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 1200),
-        child: ListView(
-      padding: const EdgeInsets.all(16),
-      children: [
-        // Header
-        Card(
-          color: Theme.of(context).colorScheme.primaryContainer,
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Icon(
-                  Icons.analytics,
-                  size: 48,
-                  color: Theme.of(context).colorScheme.onPrimaryContainer,
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  'Review Analytics',
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    color: Theme.of(context).colorScheme.onPrimaryContainer,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Overview of project reviews and ratings',
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    color: Theme.of(context).colorScheme.onPrimaryContainer.withOpacity(0.8),
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 24),
-
-        // Statistics Grid
-        GridView.count(
-          crossAxisCount: 2,
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          childAspectRatio: 1.3,
-          mainAxisSpacing: 8,
-          crossAxisSpacing: 8,
-          children: [
-            _AnalyticsCard(
-              icon: Icons.folder,
-              label: 'Total Projects',
-              value: allProjects.length.toString(),
-              color: Colors.blue,
-            ),
-            _AnalyticsCard(
-              icon: Icons.pending_actions,
-              label: 'Pending',
-              value: projectsByStatus[ProjectStatus.pending]?.length.toString() ?? '0',
-              color: Colors.orange,
-            ),
-            _AnalyticsCard(
-              icon: Icons.check_circle,
-              label: 'Approved',
-              value: projectsByStatus[ProjectStatus.approved]?.length.toString() ?? '0',
-              color: Colors.green,
-            ),
-            _AnalyticsCard(
-              icon: Icons.star,
-              label: 'Featured',
-              value: featuredCount.toString(),
-              color: Colors.purple,
-            ),
-            _AnalyticsCard(
-              icon: Icons.rate_review,
-              label: 'Total Reviews',
-              value: totalReviews.toString(),
-              color: Colors.teal,
-            ),
-            _AnalyticsCard(
-              icon: Icons.star_rate,
-              label: 'Avg Rating',
-              value: averageRating.toStringAsFixed(1),
-              color: Colors.amber,
-            ),
-          ],
-        ),
-        const SizedBox(height: 24),
-
-        // Category Distribution
-        Text(
-          'Projects by Category',
-          style: Theme.of(context).textTheme.titleLarge?.copyWith(
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        const SizedBox(height: 12),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              children: ProjectCategory.values.map((category) {
-                final count = allProjects.where((p) => p.category == category).length;
-                final percentage = allProjects.isNotEmpty ? (count / allProjects.length * 100) : 0.0;
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Text(category.displayName),
-                      ),
-                      Text('$count (${percentage.toStringAsFixed(1)}%)'),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-        ),
-      ],
-        ),
-      ),
-    );
+    // Reuse the same semester analytics screen used by admin
+    return SemesterAnalyticsBody(projectService: projectService);
   }
 }
 

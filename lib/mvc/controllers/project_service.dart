@@ -48,11 +48,12 @@ class ProjectService extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _loadProjects({bool force = false}) async {
+  Future<void> _loadProjects({bool force = false, bool showLoading = true}) async {
     if (_isLoading) return;
     if (_initialized && !force) return;
-    _setLoading(true);
-    debugPrint('ProjectService: Loading projects from Firestore');
+    
+    if (showLoading) _setLoading(true);
+    debugPrint('ProjectService: ${showLoading ? "Loading" : "Refresing"} projects from Firestore');
     
     try {
       // Load projects from Firestore
@@ -62,13 +63,10 @@ class ProjectService extends ChangeNotifier {
       _projects.clear();
       _projects.addAll(projects);
       
-      // Load reviews will be done per project when needed
-      // For now, we'll load reviews separately
-      
       _initialized = true;
-      _setLoading(false);
+      if (showLoading) _setLoading(false);
       notifyListeners();
-      debugPrint('ProjectService: Projects loaded successfully');
+      debugPrint('ProjectService: Projects ${showLoading ? "loaded" : "refreshed"} successfully');
     } catch (e) {
       debugPrint('ProjectService: Error loading projects from Firestore: $e');
       
@@ -77,7 +75,7 @@ class ProjectService extends ChangeNotifier {
       _reviews.clear();
       
       _initialized = true;
-      _setLoading(false);
+      if (showLoading) _setLoading(false);
       notifyListeners();
     }
   }
@@ -92,8 +90,7 @@ class ProjectService extends ChangeNotifier {
     await _loadProjects(force: true);
   }
 
-  Future<bool> createProject(Project project, {Uint8List? pdfBytes, List<Uint8List>? imageBytes}) async {
-    _setLoading(true);
+  Future<bool> createProject(Project project, {Uint8List? pdfBytes, List<Uint8List>? imageBytes, String? pdfPath, List<String>? imagePaths}) async {
     debugPrint('ProjectService: Starting project creation for ${project.title}');
     
     try {
@@ -107,7 +104,6 @@ class ProjectService extends ChangeNotifier {
       
       if (duplicateProject != null) {
         debugPrint('ProjectService: Duplicate project found with title: ${project.title} (status: ${duplicateProject.status})');
-        _setLoading(false);
         _lastUploadError = 'A project with the title "${project.title}" is already pending. Please use a different title or wait for the existing project to be reviewed.';
         return false;
       }
@@ -117,15 +113,15 @@ class ProjectService extends ChangeNotifier {
       String? pdfUrl;
       
       // Upload PDF if provided
-      bool pdfUploadRequired = (project.pdfUrl != null && project.pdfUrl!.isNotEmpty) || pdfBytes != null;
+      bool pdfUploadRequired = (project.pdfUrl != null && project.pdfUrl!.isNotEmpty) || pdfBytes != null || pdfPath != null;
       bool pdfUploadFailed = false;
       
       if (pdfUploadRequired) {
         debugPrint('ProjectService: Uploading PDF file');
         try {
-          debugPrint('ProjectService: Using Firebase Storage for PDF upload');
+          debugPrint('ProjectService: Using Cloudinary for PDF upload');
           pdfUrl = await FirestoreService.uploadFile(
-            project.pdfUrl ?? '', // might be empty if bytes provided
+            pdfPath ?? project.pdfUrl ?? '', // local path or existing url
             'projects/${project.id}/project_${DateTime.now().millisecondsSinceEpoch}.pdf',
             data: pdfBytes,
           );
@@ -169,18 +165,16 @@ class ProjectService extends ChangeNotifier {
       
       // If PDF upload failed, throw an error to prevent saving project
       if (pdfUploadFailed) {
-        _setLoading(false);
         final errorMsg = _lastUploadError ?? 'PDF upload failed. Please check Firebase configuration and try again.';
         throw Exception(errorMsg);
       }
       
       // Upload images if provided
-      if (project.imageUrls.isNotEmpty || (imageBytes != null && imageBytes.isNotEmpty)) {
+      if (project.imageUrls.isNotEmpty || (imageBytes != null && imageBytes.isNotEmpty) || (imagePaths != null && imagePaths.isNotEmpty)) {
         debugPrint('ProjectService: Uploading image(s)');
         
-        // Use Firebase Storage batch upload
         final uploadedUrls = await FirestoreService.uploadMultipleFiles(
-          project.imageUrls,
+          imagePaths ?? project.imageUrls,
           'projects/${project.id}',
           dataList: imageBytes,
         );
@@ -211,8 +205,8 @@ class ProjectService extends ChangeNotifier {
         _projects.add(projectWithUrls);
         debugPrint('ProjectService: Project added to local list. Total projects: ${_projects.length}');
         
-        // Log activity
-        await FirestoreService.logProjectUploaded(projectWithUrls);
+        // Log activity in background
+        FirestoreService.logProjectUploaded(projectWithUrls).catchError((e) => debugPrint('ProjectService: Failed to log upload: $e'));
         
         // Notify teachers of new project pending approval
         if (projectWithUrls.status == ProjectStatus.pending) {
@@ -225,22 +219,76 @@ class ProjectService extends ChangeNotifier {
           });
         }
         
-        _setLoading(false);
         notifyListeners();
         debugPrint('ProjectService: Project created successfully and listeners notified');
-        // Force reload all projects so other dashboards see the latest list immediately
-        await _loadProjects(force: true);
+
+        // Silent background refresh
+        _loadProjects(force: true, showLoading: false);
+        
         return true;
       } catch (e) {
         debugPrint('ProjectService: Failed to save project to Firestore: $e');
         debugPrint('ProjectService: Please check Firebase connection and configuration');
-        _setLoading(false);
         return false;
       }
     } catch (e) {
       debugPrint('ProjectService: Error creating project: $e');
       debugPrint('ProjectService: Stack trace: ${StackTrace.current}');
-      _setLoading(false);
+      return false;
+    }
+  }
+
+  Future<bool> updateProjectWithFiles(Project project, {Uint8List? pdfBytes, List<Uint8List>? imageBytes, String? pdfPath, List<String>? imagePaths}) async {
+    debugPrint('ProjectService: Updating project ${project.id}');
+    
+    try {
+      List<String> imageUrls = List.from(project.imageUrls);
+      String? pdfUrl = project.pdfUrl;
+      
+      // 1. Handle PDF Upload if bytes or path provided
+      if (pdfBytes != null || pdfPath != null) {
+        debugPrint('ProjectService: Uploading new PDF for update');
+        pdfUrl = await FirestoreService.uploadFile(
+          pdfPath ?? '', // true path if mobile, empty if web
+          'projects/${project.id}/project_${DateTime.now().millisecondsSinceEpoch}.pdf',
+          data: pdfBytes,
+        );
+      }
+      
+      // 2. Handle Image Uploads if bytes OR paths provided
+      if ((imageBytes != null && imageBytes.isNotEmpty) || (imagePaths != null && imagePaths.isNotEmpty)) {
+        debugPrint('ProjectService: Uploading new images for update');
+        final uploadedUrls = await FirestoreService.uploadMultipleFiles(
+          imagePaths ?? [], // No local paths on web/bytes
+          'projects/${project.id}',
+          dataList: imageBytes,
+        );
+        // If we want to replace existing images (as per my ProjectFormScreen logic):
+        imageUrls = uploadedUrls;
+        // If we wanted to append: imageUrls.addAll(uploadedUrls);
+      }
+      
+      final updatedProject = project.copyWith(
+        pdfUrl: pdfUrl,
+        imageUrls: imageUrls,
+        updatedAt: DateTime.now(),
+      );
+      
+      await FirestoreService.updateProject(updatedProject);
+      
+      final index = _projects.indexWhere((p) => p.id == updatedProject.id);
+      if (index != -1) {
+        _projects[index] = updatedProject;
+      }
+      
+      notifyListeners();
+      
+      // Background refresh
+      _loadProjects(force: true, showLoading: false);
+      
+      return true;
+    } catch (e) {
+      debugPrint('ProjectService: Error updating project with files: $e');
       return false;
     }
   }
@@ -312,15 +360,23 @@ class ProjectService extends ChangeNotifier {
 
       // Send notifications for status changes
       if (statusChanged) {
-        await _sendStatusChangeNotifications(originalProject, updatedProject);
-        // Log activity for status change
-        await FirestoreService.logProjectStatusChange(
-          updatedProject,
-          oldStatus,
-          updatedProject.status,
-          approverId,
-          approverName,
-        );
+        // Wrap in try-catch so notification/log failures don't crash the approval
+        try {
+          await _sendStatusChangeNotifications(originalProject, updatedProject);
+        } catch (e) {
+          debugPrint('ProjectService: Non-fatal - notification error: $e');
+        }
+        try {
+          await FirestoreService.logProjectStatusChange(
+            updatedProject,
+            oldStatus,
+            updatedProject.status,
+            approverId,
+            approverName,
+          );
+        } catch (e) {
+          debugPrint('ProjectService: Non-fatal - activity log error: $e');
+        }
       }
       
       // Always reload projects after update to ensure UI reflects changes (especially for featured status)
@@ -466,8 +522,6 @@ class ProjectService extends ChangeNotifier {
   }
 
   Future<bool> deleteProject(String projectId) async {
-    _setLoading(true);
-    
     try {
       // Find the project to get file URLs
       final project = _projects.firstWhere((p) => p.id == projectId);
@@ -483,11 +537,13 @@ class ProjectService extends ChangeNotifier {
       
       _setLoading(false);
       notifyListeners();
-      await _loadProjects(force: true);
+      
+      // Silent background refresh
+      _loadProjects(force: true, showLoading: false);
+
       return true;
     } catch (e) {
       debugPrint('Error deleting project: $e');
-      _setLoading(false);
       return false;
     }
   }

@@ -77,32 +77,38 @@ service cloud.firestore {
 
       // Update:
       // 1. Admins can do anything
-      // 2. Teachers can Update Status (Approve/Reject)
-      // 3. Authors (Students) can update content (title, abstract, etc)
-      //    BUT Authors CANNOT change status to 'approved'
-      allow update: if isAdmin() 
-        || (isTeacher() && (
-             // Teachers can update status and feedback
-             request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'feedback', 'updatedAt']) 
-             || resource.data.authorId == request.auth.uid // Or if they own it
-           ))
+      // 2. Teachers can fully update projects they review (approve/reject/feedback)
+      //    This is needed because approval also sets facultyId, facultyName, rating etc.
+      // 3. Authors (Students) can update content but NOT freely change status
+      allow update: if isAdmin()
+        || isTeacher() // Teachers can update any project field during review
         || (isOwner(resource.data.authorId) && (
-             // Authors can update content but NOT status (unless it stays same)
-             request.resource.data.status == resource.data.status 
-             || (resource.data.status == 'draft' && request.resource.data.status == 'pending') // Draft -> Pending allowed
+             // Authors can update content but NOT status (unless it stays same or draft->pending)
+             request.resource.data.status == resource.data.status
+             || (resource.data.status == 'draft' && request.resource.data.status == 'pending')
+             || (resource.data.status == 'needsRevision' && request.resource.data.status == 'pending')
            ));
-           
+
       // Delete:
       // 1. Admins
-      // 2. Owners (only if status is draft or pending, maybe?)
+      // 2. Owners
       allow delete: if isAdmin() || isOwner(resource.data.authorId);
     }
-    
-    // --- Comments / Notifications / etc ---
-    
+
+    // --- Notifications ---
     match /notifications/{notificationId} {
-      allow read: if isOwner(resource.data.userId);
-      allow write: if isAuthenticated(); // Allow users to trigger notifications (e.g. via cloud functions usually better)
+      allow read: if isAuthenticated() && (
+        resource.data.userId == request.auth.uid || isAdmin()
+      );
+      allow create: if isAuthenticated();
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAuthenticated() && (resource.data.userId == request.auth.uid || isAdmin());
+    }
+
+    // --- Activity Logs (server-side writes from approved teachers/admins) ---
+    match /activityLogs/{logId} {
+      allow read: if isAdmin();
+      allow create: if isAuthenticated();
     }
   }
 }
