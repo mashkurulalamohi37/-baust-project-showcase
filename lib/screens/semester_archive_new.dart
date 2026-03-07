@@ -730,6 +730,20 @@ class _SemesterProjectsScreenState extends State<SemesterProjectsScreen> {
               child: Text('Consolidated (Accepted + Rejected)'),
             ),
           ),
+          const Divider(height: 8),
+          SimpleDialogOption(
+            onPressed: () => Navigator.pop(context, 'evaluations'),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(vertical: 8.0),
+              child: Row(
+                children: [
+                  Icon(Icons.rate_review_outlined, size: 18),
+                  SizedBox(width: 8),
+                  Text('Evaluation Markings'),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -742,26 +756,27 @@ class _SemesterProjectsScreenState extends State<SemesterProjectsScreen> {
   Future<void> _exportProjects(String filter) async {
     setState(() => _isExporting = true);
     try {
-      // Fetch ALL projects from service to include rejected ones which might be hidden in main view
       final allProjects = _projectService.projects;
       List<Project> projectsToExport = [];
 
       for (var project in allProjects) {
-        // 1. Filter by Semester and Year
         if (project.semester.displayName != widget.semesterName ||
             project.year != widget.year) {
           continue;
         }
 
-        // 2. Apply Status Filter
-        if (filter == 'accepted' && project.status != ProjectStatus.approved)
-          continue;
-        if (filter == 'rejected' && project.status != ProjectStatus.rejected)
-          continue;
-        if (filter == 'decided' &&
-            project.status != ProjectStatus.approved &&
-            project.status != ProjectStatus.rejected) {
-          continue;
+        if (filter == 'evaluations') {
+          // Only showcase projects that have at least one evaluation
+          if (project.submissionType != ProjectSubmissionType.projectShowcase) continue;
+          if (project.evaluations.isEmpty) continue;
+        } else {
+          if (filter == 'accepted' && project.status != ProjectStatus.approved) continue;
+          if (filter == 'rejected' && project.status != ProjectStatus.rejected) continue;
+          if (filter == 'decided' &&
+              project.status != ProjectStatus.approved &&
+              project.status != ProjectStatus.rejected) {
+            continue;
+          }
         }
 
         projectsToExport.add(project);
@@ -783,7 +798,15 @@ class _SemesterProjectsScreenState extends State<SemesterProjectsScreen> {
       final capitalizedFilter = filter[0].toUpperCase() + filter.substring(1);
       final fileName =
           '${widget.semesterName}_${widget.year}_Projects_$capitalizedFilter.csv';
-      await ExportService.exportProjects(projectsToExport, fileName: fileName);
+
+      if (filter == 'evaluations') {
+        await ExportService.exportEvaluations(
+          projectsToExport,
+          fileName: '${widget.semesterName}_${widget.year}_EvaluationMarkings.csv',
+        );
+      } else {
+        await ExportService.exportProjects(projectsToExport, fileName: fileName);
+      }
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1037,7 +1060,7 @@ class _SemesterProjectsScreenState extends State<SemesterProjectsScreen> {
                                       children: [
                                         Expanded(
                                           child: Text(
-                                            'By ${project.authorName}',
+                                            'By ${project.isGroupProject ? project.authorName : ((project.studentName != null && project.studentName!.isNotEmpty) ? project.studentName! : project.authorName)}',
                                             style: TextStyle(
                                               fontSize: 13,
                                               color: Theme.of(context)

@@ -16,6 +16,7 @@ import 'mvc/controllers/notification_service.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
+import 'services/system_service.dart';
 
 // Web-specific imports for Firebase plugins
 import 'package:firebase_auth/firebase_auth.dart' as firebase_auth;
@@ -77,6 +78,9 @@ void main() async {
     } catch (e) {
       debugPrint('Notification init skipped in main: $e');
     }
+    // Initialize System Settings
+    await SystemService().loadSettings();
+    debugPrint('System settings loaded');
 
   } catch (e) {
     debugPrint('Firebase initialization error: $e');
@@ -331,20 +335,15 @@ class _AppShellState extends State<AppShell> {
         _isInitializing = false;
       });
       
-      // Show welcome screen for 2 seconds if user is not authenticated
-      if (!_authService.isAuthenticated) {
-        debugPrint('AppShell: User not authenticated, showing welcome screen');
-        await Future.delayed(const Duration(seconds: 2));
-        if (mounted) {
-          setState(() {
-            _showWelcome = false;
-          });
-        }
-      } else {
+      // Welcome screen stays until user clicks "Get Started"
+      if (_authService.isAuthenticated) {
         debugPrint('AppShell: User authenticated, skipping welcome screen');
         setState(() {
           _showWelcome = false;
         });
+      } else {
+        debugPrint('AppShell: User not authenticated, showing welcome screen');
+        // _showWelcome stays true — dismissed only by "Get Started" button
       }
       
       debugPrint('AppShell: App initialization complete');
@@ -1757,7 +1756,7 @@ class _ProjectCard extends StatelessWidget {
                   // Author
                   Expanded(
                     child: Text(
-                      'By ${project.authorName}',
+                      'By ${project.isGroupProject ? project.authorName : ((project.studentName != null && project.studentName!.isNotEmpty) ? project.studentName! : project.authorName)}${!project.isGroupProject && project.batch != null ? ' (Batch: ${project.batch})' : ''}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: scheme.onSurface.withOpacity(0.7),
                       ),

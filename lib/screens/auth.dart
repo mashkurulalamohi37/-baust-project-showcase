@@ -27,7 +27,7 @@ class _AuthGateState extends State<AuthGate> {
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24),
           child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 600),
+            constraints: const BoxConstraints(maxWidth: 450), // Reduced from 600 for a better form width
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -48,25 +48,25 @@ class _AuthGateState extends State<AuthGate> {
                     color: theme.colorScheme.onSurfaceVariant,
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 32),
                 
                 // Compact Segmented Control for Roles
                 SegmentedButton<UserRole>(
-                  segments: [
+                  segments: const [
                     ButtonSegment(
                       value: UserRole.student,
-                      label: const Text('Student'),
-                      icon: const Icon(Icons.school, size: 18),
+                      label: Text('Student'),
+                      icon: Icon(Icons.school, size: 18),
                     ),
                     ButtonSegment(
                       value: UserRole.teacher,
-                      label: const Text('Teacher'),
-                      icon: const Icon(Icons.rate_review, size: 18),
+                      label: Text('Teacher'),
+                      icon: Icon(Icons.rate_review, size: 18),
                     ),
                     ButtonSegment(
                       value: UserRole.admin,
-                      label: const Text('Admin'),
-                      icon: const Icon(Icons.admin_panel_settings, size: 18),
+                      label: Text('Admin'),
+                      icon: Icon(Icons.admin_panel_settings, size: 18),
                     ),
                   ],
                   selected: {_selectedRole},
@@ -91,7 +91,7 @@ class _AuthGateState extends State<AuthGate> {
                     side: BorderSide(color: theme.colorScheme.outlineVariant),
                   ),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.all(24), // Increased padding
                     child: _AuthTabs(
                       authService: widget.authService,
                       selectedRole: _selectedRole,
@@ -196,11 +196,13 @@ class _LoginFormState extends State<_LoginForm> {
   final _formKey = GlobalKey<FormState>();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _passwordFocusNode = FocusNode();
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
+    _passwordFocusNode.dispose();
     super.dispose();
   }
 
@@ -283,26 +285,33 @@ class _LoginFormState extends State<_LoginForm> {
               const SizedBox(height: 16),
               TextFormField(
                 controller: _emailController,
-                  keyboardType: TextInputType.emailAddress,
-                  decoration: const InputDecoration(
-                    labelText: 'Email',
-                    border: OutlineInputBorder(),
-                    prefixIcon: Icon(Icons.email),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Please enter your email';
-                    }
-                    if (!value.contains('@')) {
-                      return 'Please enter a valid email';
-                    }
-                    return null;
-                  },
+                keyboardType: TextInputType.emailAddress,
+                textInputAction: TextInputAction.next,
+                onFieldSubmitted: (_) => _passwordFocusNode.requestFocus(),
+                decoration: const InputDecoration(
+                  labelText: 'Email',
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.email),
                 ),
+                validator: (value) {
+                  if (value == null || value.isEmpty) {
+                    return 'Please enter your email';
+                  }
+                  if (!value.contains('@')) {
+                    return 'Please enter a valid email';
+                  }
+                  return null;
+                },
+              ),
                 const SizedBox(height: 16),
                 TextFormField(
                   controller: _passwordController,
+                  focusNode: _passwordFocusNode,
                   obscureText: true,
+                  textInputAction: TextInputAction.done,
+                  onFieldSubmitted: (_) {
+                    if (!widget.authService.isLoading) _handleLogin();
+                  },
                   decoration: const InputDecoration(
                     labelText: 'Password',
                     border: OutlineInputBorder(),
@@ -677,27 +686,35 @@ class _SignupFormState extends State<_SignupForm> {
                 const SizedBox(height: 16),
                 // Teacher-specific fields
                 if (_selectedRole == UserRole.teacher) ...[
-                  TextFormField(
-                    controller: _departmentController,
+                  DropdownButtonFormField<String>(
+                    value: _departmentController.text.isNotEmpty ? _departmentController.text : null,
                     decoration: InputDecoration(
                       labelText: 'Department',
-                      hintText: 'e.g., Computer Science, Engineering',
                       border: const OutlineInputBorder(),
                       prefixIcon: const Icon(Icons.business),
                       errorText: _departmentError,
                     ),
-                    textCapitalization: TextCapitalization.words,
-                    onChanged: (_) {
-                      if (_departmentError != null) {
-                        setState(() => _departmentError = null);
+                    items: const [
+                      DropdownMenuItem(
+                        value: 'Computer Science and Engineering',
+                        child: Text('Computer Science and Engineering'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'Information and Communication Technology',
+                        child: Text('Information and Communication Technology'),
+                      ),
+                    ],
+                    onChanged: (String? value) {
+                      if (value != null) {
+                        _departmentController.text = value;
+                        if (_departmentError != null) {
+                          setState(() => _departmentError = null);
+                        }
                       }
                     },
                     validator: (value) {
                       if (_selectedRole == UserRole.teacher && (value == null || value.trim().isEmpty)) {
-                        return 'Please enter your department';
-                      }
-                      if (_selectedRole == UserRole.teacher && _departmentController.text.trim().isEmpty) {
-                        return 'Department required for teachers';
+                        return 'Please select your department';
                       }
                       return null;
                     },

@@ -161,6 +161,122 @@ class _ShowcaseEvaluationCardState extends State<ShowcaseEvaluationCard> {
     return '${date.day}/${date.month}/${date.year}';
   }
 
+  Color _getScoreColorLight(double score) {
+    if (score >= 8) return Colors.green.shade400;
+    if (score >= 5) return Colors.orange.shade400;
+    return Colors.red.shade400;
+  }
+
+  Widget _buildOtherEvaluations() {
+    final currentUserId = AuthService().currentUser?.id ?? '';
+    final others = widget.project.evaluations
+        .where((e) => e.teacherId.isNotEmpty && e.teacherId != currentUserId)
+        .toList();
+
+    if (others.isEmpty) return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Divider(color: Colors.white24, height: 20),
+        Text(
+          'Other Evaluations (${others.length})',
+          style: const TextStyle(color: Colors.white70, fontSize: 12, fontWeight: FontWeight.bold),
+        ),
+        const SizedBox(height: 8),
+        ...others.map((e) {
+          final avg = e.criteria.isNotEmpty
+              ? e.criteria.values.fold<double>(0.0, (double a, double b) => a + b) / e.criteria.length
+              : e.mark;
+          final innovation = e.criteria['Innovation'] ?? e.mark;
+          final technical = e.criteria['Technical'] ?? e.mark;
+          final presentation = e.criteria['Presentation'] ?? e.mark;
+
+          return Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Teacher name + avg score
+                Row(
+                  children: [
+                    const Icon(Icons.person_outline, size: 14, color: Colors.white54),
+                    const SizedBox(width: 4),
+                    Expanded(
+                      child: Text(
+                        e.teacherName.isNotEmpty ? e.teacherName : 'Teacher',
+                        style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w600),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _getScoreColorLight(avg).withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _getScoreColorLight(avg), width: 1),
+                      ),
+                      child: Text(
+                        avg.toStringAsFixed(1),
+                        style: TextStyle(color: _getScoreColorLight(avg), fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                // Criteria scores in a row
+                Row(
+                  children: [
+                    _scorePill('Inno', innovation),
+                    const SizedBox(width: 4),
+                    _scorePill('Tech', technical),
+                    const SizedBox(width: 4),
+                    _scorePill('Pres', presentation),
+                    const Spacer(),
+                    Text(
+                      _formatDate(e.updatedAt),
+                      style: const TextStyle(color: Colors.white38, fontSize: 10),
+                    ),
+                  ],
+                ),
+                // Feedback (if any)
+                if ((e.feedback ?? '').isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    e.feedback!,
+                    style: const TextStyle(color: Colors.white54, fontSize: 11, fontStyle: FontStyle.italic),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+
+  Widget _scorePill(String label, double score) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Colors.white10,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        '$label: ${score.toStringAsFixed(1)}',
+        style: const TextStyle(color: Colors.white60, fontSize: 10),
+      ),
+    );
+  }
+
   Widget _buildSliderRow(String label, double value, Function(double) onChanged) {
     final theme = Theme.of(context);
     final primaryColor = theme.primaryColor;
@@ -171,18 +287,18 @@ class _ShowcaseEvaluationCardState extends State<ShowcaseEvaluationCard> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-            Text(value.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            Text(label, style: const TextStyle(color: Colors.white70, fontSize: 12)),
+            Text(value.toStringAsFixed(1), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
           ],
         ),
         SliderTheme(
           data: SliderTheme.of(context).copyWith(
             activeTrackColor: primaryColor,
             inactiveTrackColor: primaryColor.withOpacity(0.1),
-            trackHeight: 4.0,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8.0),
+            trackHeight: 3.0,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6.0),
             thumbColor: Colors.white,
-            overlayShape: const RoundSliderOverlayShape(overlayRadius: 16.0),
+            overlayShape: const RoundSliderOverlayShape(overlayRadius: 12.0),
             valueIndicatorColor: primaryColor,
           ),
           child: Slider(
@@ -229,7 +345,7 @@ class _ShowcaseEvaluationCardState extends State<ShowcaseEvaluationCard> {
           ),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -237,14 +353,14 @@ class _ShowcaseEvaluationCardState extends State<ShowcaseEvaluationCard> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(
                       color: primaryColor.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(8),
                     ),
-                    child: Icon(Icons.rate_review_rounded, color: primaryColor, size: 24),
+                    child: Icon(Icons.rate_review_rounded, color: primaryColor, size: 18),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -263,99 +379,73 @@ class _ShowcaseEvaluationCardState extends State<ShowcaseEvaluationCard> {
                   ),
                 ],
               ),
-              const Divider(height: 24, color: Colors.white24),
+              const Divider(height: 16, color: Colors.white24),
 
               // Total Score Display
               Center(
-                child: Column(
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text(
-                      'Total Score',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white70,
-                        letterSpacing: 1.0,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                       decoration: BoxDecoration(
                         color: _getScoreColor(_currentAverage).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(30),
-                        border: Border.all(
-                          color: _getScoreColor(_currentAverage),
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: _getScoreColor(_currentAverage).withOpacity(0.2),
-                            blurRadius: 12,
-                            spreadRadius: 2,
-                          ),
-                        ],
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: _getScoreColor(_currentAverage), width: 1.5),
                       ),
                       child: Text(
                         _currentAverage.toStringAsFixed(1),
                         style: TextStyle(
-                          fontSize: 36,
+                          fontSize: 22,
                           fontWeight: FontWeight.w900,
                           color: _getScoreColor(_currentAverage),
-                          shadows: [
-                            Shadow(
-                              color: Colors.black45,
-                              blurRadius: 2,
-                              offset: const Offset(1, 1),
-                            ),
-                          ],
                         ),
                       ),
                     ),
-                    const SizedBox(height: 4),
-                    Text('Average of 3 assignments', style: TextStyle(color: Colors.white38, fontSize: 10)),
+                    const SizedBox(width: 8),
+                    Text('avg', style: TextStyle(color: Colors.white38, fontSize: 11)),
                   ],
                 ),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
 
               // Rubric Sliders
               _buildSliderRow('Innovation & Creativity', _innovationScore, (val) => setState(() => _innovationScore = val)),
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
               _buildSliderRow('Technical Implementation', _technicalScore, (val) => setState(() => _technicalScore = val)),
-              const SizedBox(height: 12),
+              const SizedBox(height: 4),
               _buildSliderRow('Presentation & Impact', _presentationScore, (val) => setState(() => _presentationScore = val)),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
 
               // Feedback Input
-              Text('Private Feedback', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)),
-              const SizedBox(height: 8),
+              Text('Private Feedback', style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 12)),
+              const SizedBox(height: 6),
               TextField(
                 controller: _feedbackController,
-                maxLines: 3,
-                style: const TextStyle(color: Colors.white),
+                maxLines: 2,
+                style: const TextStyle(color: Colors.white, fontSize: 13),
                 decoration: InputDecoration(
-                  hintText: 'Enter feedback for admin/student...',
+                  hintText: 'Enter feedback...',
                   hintStyle: TextStyle(color: Colors.white30),
                   filled: true,
                   fillColor: Colors.black26,
                   border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                     borderSide: BorderSide.none,
                   ),
-                  contentPadding: const EdgeInsets.all(12),
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 ),
                 onChanged: (_) => setState(() => _isDirty = true),
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 12),
 
               // Save Button
               SizedBox(
                 width: double.infinity,
-                height: 50,
+                height: 38,
                 child: ElevatedButton(
                   onPressed: _isDirty && !_isSaving ? _handleSave : null,
                   style: ElevatedButton.styleFrom(
@@ -363,16 +453,16 @@ class _ShowcaseEvaluationCardState extends State<ShowcaseEvaluationCard> {
                     foregroundColor: Colors.white,
                     disabledBackgroundColor: Colors.grey[700],
                     disabledForegroundColor: Colors.grey[500],
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                   ),
                   child: _isSaving
-                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
                       : Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(_isDirty ? Icons.save_rounded : Icons.check_circle_outline),
-                            const SizedBox(width: 8),
-                            Text(_isDirty ? 'Submit Evaluation' : 'Evaluation Saved', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                            Icon(_isDirty ? Icons.save_rounded : Icons.check_circle_outline, size: 16),
+                            const SizedBox(width: 6),
+                            Text(_isDirty ? 'Submit Evaluation' : 'Evaluation Saved', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
                           ],
                         ),
                 ),
@@ -421,6 +511,9 @@ class _ShowcaseEvaluationCardState extends State<ShowcaseEvaluationCard> {
                     ),
                   ),
               ],
+              
+              // Other teachers' evaluations (visible to all teachers & admin)
+              _buildOtherEvaluations(),
             ],
           ),
         ),
