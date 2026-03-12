@@ -1,5 +1,6 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:file_picker/file_picker.dart';
@@ -9,6 +10,7 @@ import '../mvc/models/user.dart';
 import '../mvc/models/team_member.dart';
 import '../mvc/controllers/project_service.dart';
 import '../mvc/controllers/auth_service.dart';
+import '../services/system_service.dart';
 
 class ProjectForm extends StatefulWidget {
   final Project? initialProject;
@@ -39,11 +41,11 @@ class _ProjectFormState extends State<ProjectForm> {
   final _customCategoryController = TextEditingController();
   final _groupNameController = TextEditingController();
   final _studentIdController = TextEditingController();
+  final _studentNameController = TextEditingController();
   final _batchController = TextEditingController();
   final _levelController = TextEditingController();
   final _termController = TextEditingController();
   final _driveLinkController = TextEditingController();
-  final _youtubeLinkController = TextEditingController();
   final _supervisorController = TextEditingController();
   
   final List<Map<String, TextEditingController>> _teamMemberControllers = [];
@@ -63,15 +65,17 @@ class _ProjectFormState extends State<ProjectForm> {
   List<Uint8List> _selectedImageBytes = [];
   String? _selectedPdfPath;
   Uint8List? _selectedPdfBytes;
+  String? _selectedVideoPath;
+  Uint8List? _selectedVideoBytes;
   
   // Existing URLs (for Edit mode)
   List<String> _existingImageUrls = [];
   String? _existingPdfUrl;
+  String? _existingVideoUrl;
   
   // Support Data
   List<User> _approvedTeachers = [];
   String? _selectedTeacherId;
-  bool _isLoadingTeachers = false;
   bool _isSubmitting = false;
 
   @override
@@ -83,6 +87,12 @@ class _ProjectFormState extends State<ProjectForm> {
     } else {
       _initializeTeamMembers();
       _yearController.text = DateTime.now().year.toString();
+      
+      // Auto-assign primary teacher if user is a student and it's a new project
+      if (widget.authService.isStudent) {
+        final systemService = SystemService();
+        _selectedTeacherId = systemService.primaryTeacherId;
+      }
     }
   }
 
@@ -94,11 +104,11 @@ class _ProjectFormState extends State<ProjectForm> {
     _customCategoryController.text = project.customCategory ?? '';
     _groupNameController.text = project.groupName ?? '';
     _studentIdController.text = project.studentId ?? '';
+    _studentNameController.text = project.studentName ?? '';
     _batchController.text = project.batch?.toString() ?? '';
     _levelController.text = project.level?.toString() ?? '';
     _termController.text = project.term?.toString() ?? '';
     _driveLinkController.text = project.driveLink ?? '';
-    _youtubeLinkController.text = project.youtubeUrl ?? '';
     
     _submissionType = project.submissionType;
     _selectedAcademicCourse = project.academicCourse;
@@ -115,9 +125,13 @@ class _ProjectFormState extends State<ProjectForm> {
     // Handle existing files
     _existingImageUrls = List.from(project.imageUrls);
     _existingPdfUrl = project.pdfUrl;
+    _existingVideoUrl = project.videoUrl;
     
     if (_existingPdfUrl != null) {
       _selectedPdfPath = 'Existing PDF';
+    }
+    if (_existingVideoUrl != null) {
+      _selectedVideoPath = 'Existing Video';
     }
 
     _initializeTeamMembers(initialMembers: project.teamMembers);
@@ -147,11 +161,11 @@ class _ProjectFormState extends State<ProjectForm> {
     _customCategoryController.dispose();
     _groupNameController.dispose();
     _studentIdController.dispose();
+    _studentNameController.dispose();
     _batchController.dispose();
     _levelController.dispose();
     _termController.dispose();
     _driveLinkController.dispose();
-    _youtubeLinkController.dispose();
     _supervisorController.dispose();
     for (var controllers in _teamMemberControllers) {
       for (var c in controllers.values) {
@@ -163,7 +177,6 @@ class _ProjectFormState extends State<ProjectForm> {
 
   Future<void> _loadTeachers() async {
     if (!mounted) return;
-    setState(() => _isLoadingTeachers = true);
     try {
       final teachers = await widget.authService.getUsersByRole(UserRole.teacher);
       final approved = teachers.where((teacher) => 
@@ -173,14 +186,10 @@ class _ProjectFormState extends State<ProjectForm> {
       if (mounted) {
         setState(() {
           _approvedTeachers = approved;
-          _isLoadingTeachers = false;
         });
       }
     } catch (e) {
       debugPrint('ProjectForm: Error loading teachers $e');
-      if (mounted) {
-        setState(() => _isLoadingTeachers = false);
-      }
     }
   }
 
@@ -196,6 +205,16 @@ class _ProjectFormState extends State<ProjectForm> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Maximum 5 images allowed.')),
+            );
+          }
+          return;
+        }
+        
+        // 10MB limit per image
+        if (result.files.any((file) => file.size > 10 * 1024 * 1024)) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Each image must be less than 10MB.')),
             );
           }
           return;
@@ -227,6 +246,16 @@ class _ProjectFormState extends State<ProjectForm> {
         withData: kIsWeb, // Crucial for reading file bytes on the Web
       );
       if (result != null) {
+        // 10MB limit for PDF
+        if (result.files.single.size > 10 * 1024 * 1024) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('PDF must be less than 10MB.')),
+            );
+          }
+          return;
+        }
+
         setState(() {
           if (kIsWeb) {
             _selectedPdfBytes = result.files.single.bytes;
@@ -243,6 +272,39 @@ class _ProjectFormState extends State<ProjectForm> {
     }
   }
 
+  Future<void> _pickVideo() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.video,
+        withData: kIsWeb,
+      );
+      if (result != null) {
+        // 100MB limit for Video
+        if (result.files.single.size > 100 * 1024 * 1024) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Video must be less than 100MB.')),
+            );
+          }
+          return;
+        }
+
+        setState(() {
+          if (kIsWeb) {
+            _selectedVideoBytes = result.files.single.bytes;
+            _selectedVideoPath = result.files.single.name;
+          } else if (result.files.single.path != null) {
+            _selectedVideoPath = result.files.single.path;
+            _selectedVideoBytes = null;
+          }
+          _existingVideoUrl = null;
+        });
+      }
+    } catch (e) {
+      debugPrint('ProjectForm: Error picking Video $e');
+    }
+  }
+
   Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     
@@ -252,6 +314,50 @@ class _ProjectFormState extends State<ProjectForm> {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Select a teacher')));
       setState(() => _isSubmitting = false);
       return;
+    }
+
+    // Image Validation for Software and Hardware
+    if (_selectedProjectType == ProjectType.project || _selectedProjectType == ProjectType.hardware) {
+      final bool hasNewImages = _selectedImagePaths.isNotEmpty || _selectedImageBytes.isNotEmpty;
+      final bool hasExistingImages = _existingImageUrls.isNotEmpty;
+      
+      if (!hasNewImages && !hasExistingImages) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${_selectedProjectType.displayName} requires at least one project image.')),
+        );
+        setState(() => _isSubmitting = false);
+        return;
+      }
+    }
+
+    // PDF Validation for Software, Hardware and Thesis
+    if (_selectedProjectType == ProjectType.project || 
+        _selectedProjectType == ProjectType.hardware || 
+        _selectedProjectType == ProjectType.thesis) {
+      final bool hasNewPdf = _selectedPdfPath != null || _selectedPdfBytes != null;
+      final bool hasExistingPdf = _existingPdfUrl != null && _existingPdfUrl!.isNotEmpty;
+      
+      if (!hasNewPdf && !hasExistingPdf) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${_selectedProjectType.displayName} requires a project PDF/Report.')),
+        );
+        setState(() => _isSubmitting = false);
+        return;
+      }
+    }
+
+    // Video Validation for Software (ProjectType.project)
+    if (_selectedProjectType == ProjectType.project) {
+      final bool hasNewVideo = _selectedVideoPath != null || _selectedVideoBytes != null;
+      final bool hasExistingVideo = _existingVideoUrl != null && _existingVideoUrl!.isNotEmpty;
+
+      if (!hasNewVideo && !hasExistingVideo) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('${_selectedProjectType.displayName} requires a Demo Video.')),
+        );
+        setState(() => _isSubmitting = false);
+        return;
+      }
     }
 
     final List<TeamMember> teamMembers = [];
@@ -289,14 +395,19 @@ class _ProjectFormState extends State<ProjectForm> {
       pdfUrl: _existingPdfUrl, // Network URL only
       supervisor: supervisor,
       facultyId: _selectedTeacherId!,
-      facultyName: _approvedTeachers.firstWhere((t) => t.id == _selectedTeacherId).name,
+      facultyName: _approvedTeachers.any((t) => t.id == _selectedTeacherId)
+          ? _approvedTeachers.firstWhere((t) => t.id == _selectedTeacherId).name
+          : (SystemService().primaryTeacherId == _selectedTeacherId 
+              ? SystemService().primaryTeacherName ?? 'Primary Teacher'
+              : 'Unknown Teacher'),
       projectType: _selectedProjectType,
       isGroupProject: _isGroupProject,
       groupName: _isGroupProject ? _groupNameController.text.trim() : null,
       teamMembers: teamMembers,
       driveLink: _driveLinkController.text.trim().isNotEmpty ? _driveLinkController.text.trim() : null,
-      youtubeUrl: _youtubeLinkController.text.trim().isNotEmpty ? _youtubeLinkController.text.trim() : null,
+      videoUrl: _existingVideoUrl, // Set from explicitly updated existing video or null
       studentId: !_isGroupProject ? _studentIdController.text.trim() : null,
+      studentName: !_isGroupProject ? _studentNameController.text.trim() : null,
       batch: !_isGroupProject ? int.tryParse(_batchController.text) : null,
       level: !_isGroupProject ? int.tryParse(_levelController.text) : null,
       term: !_isGroupProject ? int.tryParse(_termController.text) : null,
@@ -307,24 +418,55 @@ class _ProjectFormState extends State<ProjectForm> {
     );
 
     final statusNotifier = ValueNotifier<String>('Uploading...');
+    final progressNotifier = ValueNotifier<double>(0);
+    
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => ValueListenableBuilder<String>(
         valueListenable: statusNotifier,
-        builder: (context, status, _) => AlertDialog(
-          title: Text(widget.initialProject == null ? 'Uploading Project' : 'Updating Project'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const CircularProgressIndicator(),
-              const SizedBox(height: 16),
-              Text(status),
-            ],
-          ),
-        ),
+        builder: (context, status, _) => ValueListenableBuilder<double>(
+          valueListenable: progressNotifier,
+          builder: (context, progress, _) {
+            final theme = Theme.of(context);
+            return AlertDialog(
+              title: Text(widget.initialProject == null ? 'Uploading Project' : 'Updating Project'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const SizedBox(height: 16),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 8,
+                    backgroundColor: theme.colorScheme.surfaceContainerHighest,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  '${(progress * 100).toStringAsFixed(1)}%',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                    color: theme.colorScheme.primary,
+                  ),
+                ),
+                const SizedBox(height: 24),
+                Text(
+                  status,
+                  textAlign: TextAlign.center,
+                  style: theme.textTheme.bodyMedium?.copyWith(
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
+          );
+        },
       ),
-    );
+    ),
+  );
 
     try {
       // GitHub Visibility Check
@@ -348,16 +490,48 @@ class _ProjectFormState extends State<ProjectForm> {
           project,
           pdfBytes: _selectedPdfBytes,
           imageBytes: _selectedImageBytes,
+          videoBytes: _selectedVideoBytes,
           pdfPath: _selectedPdfPath,
           imagePaths: _selectedImagePaths,
+          videoPath: _selectedVideoPath != 'Existing Video' ? _selectedVideoPath : null,
+          onProgress: (p) => progressNotifier.value = p,
+          onFileUploaded: (type, url) {
+            if (mounted) {
+              setState(() {
+                if (type == 'pdf') _existingPdfUrl = url;
+                if (type == 'image') {
+                  if (!_existingImageUrls.contains(url)) {
+                    _existingImageUrls.add(url);
+                  }
+                }
+                if (type == 'video') _existingVideoUrl = url;
+              });
+            }
+          },
         );
       } else {
         success = await widget.projectService.updateProjectWithFiles(
           project,
           pdfBytes: _selectedPdfBytes,
           imageBytes: _selectedImageBytes,
+          videoBytes: _selectedVideoBytes,
           pdfPath: _selectedPdfPath,
           imagePaths: _selectedImagePaths,
+          videoPath: _selectedVideoPath != 'Existing Video' ? _selectedVideoPath : null,
+          onProgress: (p) => progressNotifier.value = p,
+          onFileUploaded: (type, url) {
+            if (mounted) {
+              setState(() {
+                if (type == 'pdf') _existingPdfUrl = url;
+                if (type == 'image') {
+                  if (!_existingImageUrls.contains(url)) {
+                    _existingImageUrls.add(url);
+                  }
+                }
+                if (type == 'video') _existingVideoUrl = url;
+              });
+            }
+          },
         );
       }
 
@@ -649,13 +823,21 @@ class _ProjectFormState extends State<ProjectForm> {
               icon: Icons.assignment_ind_outlined,
               child: Column(
                 children: [
-                  DropdownButtonFormField<String>(
-                    value: _selectedTeacherId,
-                    decoration: const InputDecoration(labelText: 'Assign to Teacher', prefixIcon: Icon(Icons.person_search)),
-                    items: _approvedTeachers.map((t) => DropdownMenuItem(value: t.id, child: Text(t.designation != null ? '${t.name} (${t.designation!.displayName})' : t.name))).toList(),
-                    onChanged: (v) => setState(() => _selectedTeacherId = v),
-                    validator: (v) => v == null ? 'Required' : null,
-                  ),
+                  if (!widget.authService.isStudent)
+                    DropdownButtonFormField<String>(
+                      value: _selectedTeacherId,
+                      decoration: const InputDecoration(labelText: 'Assign to Teacher', prefixIcon: Icon(Icons.person_search)),
+                      items: _approvedTeachers.map((t) => DropdownMenuItem(value: t.id, child: Text(t.designation != null ? '${t.name} (${t.designation!.displayName})' : t.name))).toList(),
+                      onChanged: (v) => setState(() => _selectedTeacherId = v),
+                      validator: (v) => v == null ? 'Required' : null,
+                    )
+                  else if (_selectedTeacherId != null)
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: const Icon(Icons.person_outline),
+                      title: const Text('Reviewing Teacher'),
+                      subtitle: Text(SystemService().primaryTeacherName ?? 'Primary Teacher'),
+                    ),
                   const SizedBox(height: 16),
                   TextFormField(
                     controller: _supervisorController,
@@ -797,10 +979,17 @@ class _ProjectFormState extends State<ProjectForm> {
               const SizedBox(height: 16),
             ] else ...[
               TextFormField(
+                controller: _studentNameController,
+                decoration: const InputDecoration(labelText: 'Student Full Name', prefixIcon: Icon(Icons.person)),
+                validator: (v) => (!_isGroupProject && v!.trim().isEmpty) ? 'Required for individual projects' : null,
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
                 controller: _studentIdController,
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
                 decoration: const InputDecoration(labelText: 'Student ID', prefixIcon: Icon(Icons.badge)),
+                validator: (v) => (!_isGroupProject && v!.trim().isEmpty) ? 'Required' : null,
               ),
               const SizedBox(height: 16),
               Row(children: [
@@ -850,13 +1039,6 @@ class _ProjectFormState extends State<ProjectForm> {
               const SizedBox(height: 16),
             ],
 
-            // YouTube
-            TextFormField(
-              controller: _youtubeLinkController,
-              decoration: const InputDecoration(labelText: 'YouTube Demo Link (optional)', prefixIcon: Icon(Icons.play_circle_outline)),
-            ),
-            const SizedBox(height: 16),
-
             // Drive
             TextFormField(
               controller: _driveLinkController,
@@ -868,7 +1050,11 @@ class _ProjectFormState extends State<ProjectForm> {
             OutlinedButton.icon(
               onPressed: _pickPdf,
               icon: Icon(_selectedPdfPath != null || _existingPdfUrl != null ? Icons.check_circle_outline : Icons.attach_file),
-              label: Text(_selectedPdfPath != null || _existingPdfUrl != null ? 'PDF Attached' : 'Attach PDF'),
+              label: Text(_selectedPdfPath != null || _existingPdfUrl != null 
+                ? 'PDF Attached' 
+                : (_selectedProjectType == ProjectType.project || _selectedProjectType == ProjectType.hardware || _selectedProjectType == ProjectType.thesis 
+                  ? 'Attach PDF (Required, Max 10MB)' 
+                  : 'Attach PDF (Optional, Max 10MB)')),
             ),
             if (_selectedPdfPath != null && _selectedPdfPath != 'Existing PDF')
               Padding(
@@ -915,11 +1101,70 @@ class _ProjectFormState extends State<ProjectForm> {
               ),
             const SizedBox(height: 12),
 
+            // Video Attach (hidden for Research projects)
+            if (_selectedProjectType != ProjectType.thesis) ...[
+              OutlinedButton.icon(
+                onPressed: _pickVideo,
+                icon: Icon(_selectedVideoPath != null || _existingVideoUrl != null ? Icons.check_circle_outline : Icons.video_call),
+                label: Text(_selectedVideoPath != null || _existingVideoUrl != null 
+                  ? 'Video Attached' 
+                  : (_selectedProjectType == ProjectType.project 
+                    ? 'Attach Demo Video (Required, Max 100MB)' 
+                    : 'Attach Demo Video (Optional, Max 100MB)')),
+              ),
+              if (_selectedVideoPath != null && _selectedVideoPath != 'Existing Video')
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.video_file, size: 16, color: Colors.blueAccent),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          _selectedVideoPath!.split('/').last.split('\\').last,
+                          style: theme.textTheme.bodySmall,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 16),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => setState(() {
+                          _selectedVideoPath = null;
+                          _selectedVideoBytes = null;
+                        }),
+                      ),
+                    ],
+                  ),
+                )
+              else if (_existingVideoUrl != null)
+                Padding(
+                  padding: const EdgeInsets.only(top: 6, left: 4),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.video_file, size: 16, color: Colors.blueAccent),
+                      const SizedBox(width: 6),
+                      const Expanded(child: Text('Existing Video attached', overflow: TextOverflow.ellipsis)),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 16),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: () => setState(() => _existingVideoUrl = null),
+                      ),
+                    ],
+                  ),
+                ),
+              const SizedBox(height: 12),
+            ],
+
             // Images Attach
             OutlinedButton.icon(
               onPressed: _pickImages,
               icon: Icon(_selectedImagePaths.isNotEmpty || _existingImageUrls.isNotEmpty ? Icons.check_circle_outline : Icons.add_photo_alternate),
-              label: Text(_selectedImagePaths.isNotEmpty || _existingImageUrls.isNotEmpty ? 'Images Selected' : 'Add Images'),
+              label: Text(_selectedImagePaths.isNotEmpty || _existingImageUrls.isNotEmpty 
+                ? 'Images Selected' 
+                : (_selectedProjectType == ProjectType.thesis ? 'Add Images (Max 10MB)' : 'Add Images (Required, Max 10MB)')),
             ),
             if (_selectedImagePaths.isNotEmpty)
               Padding(

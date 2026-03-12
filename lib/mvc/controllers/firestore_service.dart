@@ -1,4 +1,3 @@
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_storage/firebase_storage.dart';
@@ -9,7 +8,7 @@ import '../models/review.dart';
 import '../models/team_member.dart';
 import '../models/feedback.dart' as feedback_models;
 import 'notification_service.dart';
-import 'package:projectshowcase/services/cloudinary_service.dart';
+import 'package:projectshowcase/services/imagekit_service.dart';
 
 class FirestoreService {
   static final FirebaseFirestore _firestore = FirebaseFirestore.instance;
@@ -20,7 +19,7 @@ class FirestoreService {
   static const String _reviewsCollection = 'reviews';
   static const String _bookmarksCollection = 'bookmarks';
   static const String _systemConfigCollection = 'system_config';
-  static const String _otpsCollection = 'otps';
+
 
   // System settings
   static Future<Map<String, dynamic>> getSystemSettings() async {
@@ -593,53 +592,6 @@ class FirestoreService {
     }
   }
 
-  // OTP Operations
-  static Future<void> saveOTP(String email, String otp) async {
-    try {
-      final normalizedEmail = _normalizeEmail(email);
-      await _firestore.collection(_otpsCollection).doc(normalizedEmail).set({
-        'email': normalizedEmail,
-        'otp': otp,
-        'createdAt': FieldValue.serverTimestamp(),
-        'expiresAt': Timestamp.fromDate(
-          DateTime.now().add(const Duration(minutes: 10)),
-        ),
-      });
-      print('OTP saved successfully for $normalizedEmail');
-    } catch (e) {
-      print('ERROR: Failed to save OTP: $e');
-      rethrow;
-    }
-  }
-
-  static Future<bool> verifyOTP(String email, String otp) async {
-    try {
-      final normalizedEmail = _normalizeEmail(email);
-      final doc = await _firestore.collection(_otpsCollection).doc(normalizedEmail).get();
-      
-      if (!doc.exists) return false;
-      
-      final data = doc.data()!;
-      final storedOtp = data['otp'] as String;
-      final expiresAt = (data['expiresAt'] as Timestamp).toDate();
-      
-      if (DateTime.now().isAfter(expiresAt)) {
-        await doc.reference.delete(); // Cleanup expired OTP
-        return false;
-      }
-      
-      if (storedOtp == otp) {
-        await doc.reference.delete(); // Use once and delete
-        return true;
-      }
-      
-      return false;
-    } catch (e) {
-      print('ERROR: Failed to verify OTP: $e');
-      return false;
-    }
-  }
-
   // Project operations
   static Future<void> saveProject(Project project) async {
     try {
@@ -699,8 +651,9 @@ class FirestoreService {
         'groupName': project.groupName,
         'teamMembers': project.teamMembers.map((m) => m.toMap()).toList(),
         'driveLink': project.driveLink,
-        'youtubeUrl': project.youtubeUrl,
+        'videoUrl': project.videoUrl,
         'studentId': project.studentId,
+        'studentName': project.studentName,
         'batch': project.batch,
         'level': project.level,
         'term': project.term,
@@ -779,7 +732,7 @@ class FirestoreService {
                     .toList() ??
                 [],
             driveLink: data['driveLink'],
-            youtubeUrl: data['youtubeUrl'],
+            videoUrl: data['videoUrl'] ?? data['youtubeUrl'], // Fallback to old data
             studentId: data['studentId'],
             batch: data['batch'],
             level: data['level'],
@@ -919,8 +872,9 @@ class FirestoreService {
                     .toList() ??
                 [],
             driveLink: data['driveLink'],
-            youtubeUrl: data['youtubeUrl'],
+            videoUrl: data['videoUrl'] ?? data['youtubeUrl'],
             studentId: data['studentId'],
+            studentName: data['studentName'],
             batch: data['batch'],
             level: data['level'],
             term: data['term'],
@@ -1024,8 +978,9 @@ class FirestoreService {
                 .toList() ??
             [],
         driveLink: data['driveLink'],
-        youtubeUrl: data['youtubeUrl'],
+        videoUrl: data['videoUrl'] ?? data['youtubeUrl'],
         studentId: data['studentId'],
+        studentName: data['studentName'],
         batch: data['batch'],
         level: data['level'],
         term: data['term'],
@@ -1348,38 +1303,29 @@ class FirestoreService {
   }
 
   // File upload operations
-  static Future<String?> uploadFile(String path, String fileName, {Uint8List? data}) async {
+  static Future<String?> uploadFile(
+    String path, 
+    String fileName, {
+    Uint8List? data,
+    Function(double)? onProgress,
+  }) async {
     try {
       print('FirestoreService: ========== UPLOAD START ==========');
-      print('FirestoreService: Uploading file to Cloudinary');
+      print('FirestoreService: Uploading file to ImageKit');
       
-      final cloudinary = CloudinaryService();
-      
-      // Determine resource type from file extension
-      String resourceType = 'auto';
-      if (fileName.toLowerCase().endsWith('.pdf')) {
-        resourceType = 'raw';
-      } else if (fileName.toLowerCase().endsWith('.jpg') || 
-                 fileName.toLowerCase().endsWith('.png') || 
-                 fileName.toLowerCase().endsWith('.jpeg') ||
-                 fileName.toLowerCase().endsWith('.gif') ||
-                 fileName.toLowerCase().endsWith('.webp')) {
-        resourceType = 'image';
-      }
-      
-      print('FirestoreService: Resource type: $resourceType');
-      print('FirestoreService: File name: $fileName');
+      final imageKit = ImageKitService();
       
       // Use provided path on mobile, fallback to fileName on web
       final actualPath = path.trim().isNotEmpty ? path : fileName;
       print('FirestoreService: Actual path resolving to: $actualPath');
 
-      // Upload to Cloudinary
-      final url = await cloudinary.uploadFile(
+      // Upload to ImageKit
+      final url = await imageKit.uploadFile(
         actualPath,
-        resourceType: resourceType,
+        fileName: fileName,
         folder: 'projectshowcase',
         bytes: data,
+        onProgress: onProgress,
       );
       
       if (url != null) {
@@ -1389,12 +1335,12 @@ class FirestoreService {
       } else {
         print('FirestoreService: Upload failed - no URL returned');
         print('FirestoreService: ========== UPLOAD FAILED ==========');
-        return null;
+        throw Exception('Upload failed - no URL returned');
       }
     } catch (e) {
-      print('FirestoreService: Error uploading file to Cloudinary: $e');
+      print('FirestoreService: Error uploading file to ImageKit: $e');
       print('FirestoreService: ========== UPLOAD ERROR ==========');
-      return null;
+      rethrow;
     }
   }
 
@@ -1402,30 +1348,35 @@ class FirestoreService {
     List<String> paths,
     String folder, {
     List<Uint8List>? dataList,
+    Function(double)? onProgress,
   }) async {
     try {
-      final cloudinary = CloudinaryService();
+      final imageKit = ImageKitService();
       final urls = <String>[];
       
       if (dataList != null && dataList.isNotEmpty) {
         // Web: Upload from bytes
         for (int i = 0; i < dataList.length; i++) {
           final fileName = '${folder}_${DateTime.now().millisecondsSinceEpoch}_$i';
-          final url = await cloudinary.uploadFile(
-            fileName,
-            resourceType: 'auto',
+          final url = await imageKit.uploadFile(
+            '', // No path for bytes
+            fileName: fileName,
             folder: 'projectshowcase/$folder',
             bytes: dataList[i],
+            onProgress: onProgress != null ? (p) => onProgress((i + p) / dataList.length) : null,
           );
           if (url != null) urls.add(url);
         }
       } else {
         // Mobile: Upload from file paths
-        for (final path in paths) {
-          final url = await cloudinary.uploadFile(
+        for (int i = 0; i < paths.length; i++) {
+          final path = paths[i];
+          final fileName = path.split('/').last;
+          final url = await imageKit.uploadFile(
             path,
-            resourceType: 'auto',
+            fileName: fileName,
             folder: 'projectshowcase/$folder',
+            onProgress: onProgress != null ? (p) => onProgress((i + p) / paths.length) : null,
           );
           if (url != null) urls.add(url);
         }
@@ -1433,17 +1384,15 @@ class FirestoreService {
       
       return urls;
     } catch (e) {
-      print('Error uploading multiple files to Cloudinary: $e');
-      return [];
+      print('Error uploading multiple files to ImageKit: $e');
+      rethrow;
     }
   }
 
-  // Delete file from Firebase Storage
+  // Delete file - disabled for now to prevent accidental deletion during migration
   static Future<void> deleteFile(String url) async {
     try {
-      // Note: Cloudinary doesn't support unauthenticated frontend deletion 
-      // without a signature generation backend. Skipping for now.
-      print('FirestoreService: deleteFile is disabled for Cloudinary to prevent unauthorized deletions.');
+      print('FirestoreService: deleteFile is currently disabled to protect legacy uploads.');
     } catch (e) {
       print('ERROR: Failed to delete file: $e');
     }
