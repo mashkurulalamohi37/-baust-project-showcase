@@ -45,12 +45,14 @@ class ImageKitService {
           bytes,
           filename: fileName,
         ));
-      } else if (filePath.isNotEmpty) {
+      } else if (!kIsWeb && filePath.isNotEmpty) {
         request.files.add(await http.MultipartFile.fromPath(
           'file',
           filePath,
           filename: fileName,
         ));
+      } else if (kIsWeb && filePath.isNotEmpty) {
+        debugPrint('ImageKitService: Warning - fromPath is not supported on web. Use bytes instead.');
       }
 
       debugPrint('ImageKitService: Uploading $fileName to folder: $folder');
