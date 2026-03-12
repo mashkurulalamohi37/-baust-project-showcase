@@ -18,6 +18,7 @@ import '../services/announcement_service.dart';
 import '../models/announcement.dart';
 import 'package:intl/intl.dart';
 import '../widgets/announcement_carousel.dart';
+import '../services/system_service.dart';
 
 class TeacherDashboardScreen extends StatefulWidget {
   const TeacherDashboardScreen({super.key});
@@ -184,9 +185,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             label: 'All Projects',
           ),
           NavigationDestination(
-            icon: Icon(Icons.comment_outlined),
-            selectedIcon: Icon(Icons.comment),
-            label: 'My Reviews',
+            icon: Icon(Icons.checklist_rtl_outlined),
+            selectedIcon: Icon(Icons.checklist_rtl),
+            label: 'Distributed',
           ),
           NavigationDestination(
             icon: Icon(Icons.analytics_outlined),
@@ -194,9 +195,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
             label: 'Analytics',
           ),
           NavigationDestination(
-            icon: Icon(Icons.archive_outlined),
-            selectedIcon: Icon(Icons.archive),
-            label: 'Archives',
+            icon: Icon(Icons.menu),
+            selectedIcon: Icon(Icons.menu_open),
+            label: 'More',
           ),
         ],
         body: AnimatedBuilder(
@@ -213,9 +214,9 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                         announcementService: _announcementService,
                       ),
                       _AllProjectsTab(projectService: _projectService, authService: _authService),
-                      _MyReviewsTab(projectService: _projectService, authService: _authService),
+                      _DistributedProjectsTab(projectService: _projectService, authService: _authService),
                       _AnalyticsTab(projectService: _projectService, authService: _authService),
-                      const SemesterArchiveScreen(),
+                      _TeacherMoreTab(projectService: _projectService, authService: _authService),
                     ],
                   ),
                   if (_projectService.isLoading)
@@ -976,7 +977,8 @@ class _ProjectReviewCard extends StatelessWidget {
               
               // Author info
               Text(
-                'By ${project.authorName}',
+                'By ${project.isGroupProject ? project.authorName : ((project.studentName != null && project.studentName!.isNotEmpty) ? project.studentName! : project.authorName)}' + 
+                (project.level != null && project.term != null ? ' • L${project.level} T${project.term}' : ''),
                 style: TextStyle(
                   color: scheme.onSurface.withOpacity(0.7),
                   fontSize: 14,
@@ -1024,6 +1026,12 @@ class _ProjectReviewCard extends StatelessWidget {
                             icon: const Icon(Icons.check_circle, color: Colors.green),
                             label: const Text('Approve'),
                           ),
+                          if (authService.currentUser?.id == SystemService().primaryTeacherId)
+                            TextButton.icon(
+                              onPressed: () => _showDistributionDialog(context, project),
+                              icon: const Icon(Icons.share, color: Colors.blue),
+                              label: const Text('Distribute'),
+                            ),
                           TextButton.icon(
                             onPressed: () => _giveFeedback(context, project),
                             icon: const Icon(Icons.feedback, color: Colors.orange),
@@ -1117,7 +1125,7 @@ class _ProjectReviewCard extends StatelessWidget {
     );
   }
 
-  void _commentProject(BuildContext context, Project project) {
+  void _commentProject(BuildContext context, Project project) async {
     // Navigate to project detail for commenting
     Navigator.of(context).push(
       MaterialPageRoute<void>(
@@ -1126,6 +1134,17 @@ class _ProjectReviewCard extends StatelessWidget {
           projectService: projectService,
           authService: authService,
         ),
+      ),
+    );
+  }
+
+  void _showDistributionDialog(BuildContext context, Project project) {
+    showDialog(
+      context: context,
+      builder: (context) => _DistributionDialog(
+        project: project,
+        authService: authService,
+        projectService: projectService,
       ),
     );
   }
@@ -1220,16 +1239,22 @@ class _ReviewCard extends StatelessWidget {
 // Check if a pending project is visible to a teacher (only assigned teacher can see pending)
 bool _isPendingProjectVisibleToTeacher(Project project, User? teacher) {
   if (teacher == null) return false;
-  // If project has no assigned teacher, don't show to anyone (should be assigned first)
-  if ((project.facultyId == null || project.facultyId!.isEmpty) && 
-      (project.assistantTeacherId == null || project.assistantTeacherId!.isEmpty)) return false;
-  // Only show to the assigned teacher or assistant teacher
+  
+  // If project is distributed to an assistant, hide it from the primary teacher's pending list
+  if (project.facultyId == teacher.id && project.assistantTeacherId != null) {
+    return false;
+  }
+  
+  // Visible if assigned as primary OR assistant
   return project.facultyId == teacher.id || project.assistantTeacherId == teacher.id;
 }
 
 // Check if a project is visible to a teacher (for general visibility checks)
 bool _isProjectVisibleToTeacher(Project project, User? teacher) {
   if (teacher == null) return false;
+  
+  // Faculty sees their own assigned projects (Primary or Assistant)
+  if (project.facultyId == teacher.id || project.assistantTeacherId == teacher.id) return true;
   
   // Approved projects: visible to all teachers (they can review)
   if (project.status == ProjectStatus.approved || 
@@ -1667,13 +1692,427 @@ class _RejectionDialogState extends State<_RejectionDialog> {
           backgroundColor: Colors.red,
         ),
       );
-    } else if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Failed to reject project'),
-          backgroundColor: Colors.red,
+    }
+  }
+}
+
+class _DistributionDialog extends StatefulWidget {
+  const _DistributionDialog({
+    required this.project,
+    required this.authService,
+    required this.projectService,
+  });
+
+  final Project project;
+  final AuthService authService;
+  final ProjectService projectService;
+
+  @override
+  State<_DistributionDialog> createState() => _DistributionDialogState();
+}
+
+class _DistributionDialogState extends State<_DistributionDialog> {
+  List<User> _teachers = [];
+  bool _isLoading = true;
+  String? _selectedTeacherId;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedTeacherId = widget.project.assistantTeacherId;
+    _loadTeachers();
+  }
+
+  Future<void> _loadTeachers() async {
+    try {
+      final teachers = await widget.authService.getUsersByRole(UserRole.teacher);
+      if (mounted) {
+        setState(() {
+          _teachers = teachers.where((t) => 
+            t.isApproved && 
+            t.isActive && 
+            t.id != widget.authService.currentUser?.id
+          ).toList();
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Distribute Project'),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 400),
+        child: SizedBox(
+          width: double.maxFinite,
+          child: _isLoading 
+            ? const Center(child: Padding(
+                padding: EdgeInsets.all(20),
+                child: CircularProgressIndicator(),
+              ))
+            : _teachers.isEmpty
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No other approved teachers found'),
+                )
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _teachers.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final teacher = _teachers[index];
+                    final isSelected = teacher.id == _selectedTeacherId;
+                    return ListTile(
+                      dense: true,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                      title: Text(teacher.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                      subtitle: Text(teacher.designation?.displayName ?? 'Teacher', style: const TextStyle(fontSize: 12)),
+                      trailing: isSelected 
+                        ? const Icon(Icons.check_circle, color: Colors.blue, size: 20) 
+                        : const Icon(Icons.circle_outlined, size: 20, color: Colors.grey),
+                      onTap: () {
+                        setState(() {
+                          _selectedTeacherId = teacher.id;
+                        });
+                      },
+                    );
+                  },
+                ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: (_isSaving || _selectedTeacherId == null || _selectedTeacherId == widget.project.assistantTeacherId)
+              ? null
+              : () async {
+                  setState(() => _isSaving = true);
+                  final selectedTeacher = _teachers.firstWhere((t) => t.id == _selectedTeacherId);
+                  final updatedProject = widget.project.copyWith(
+                    assistantTeacherId: _selectedTeacherId,
+                  );
+                  final success = await widget.projectService.updateProject(updatedProject);
+                  if (success && mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Distributed to ${selectedTeacher.name}'),
+                        behavior: SnackBarBehavior.floating,
+                      ),
+                    );
+                  } else if (mounted) {
+                    setState(() => _isSaving = false);
+                  }
+                },
+          child: _isSaving 
+            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+            : const Text('Confirm'),
+        ),
+      ],
+    );
+  }
+}
+
+class _DistributedProjectsTab extends StatefulWidget {
+  const _DistributedProjectsTab({
+    super.key,
+    required this.projectService,
+    required this.authService,
+  });
+
+  final ProjectService projectService;
+  final AuthService authService;
+
+  @override
+  State<_DistributedProjectsTab> createState() => _DistributedProjectsTabState();
+}
+
+class _DistributedProjectsTabState extends State<_DistributedProjectsTab> {
+  Map<String, String> _teacherNames = {};
+  bool _isLoadingNames = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTeacherNames();
+  }
+
+  Future<void> _loadTeacherNames() async {
+    try {
+      final teachers = await widget.authService.getUsersByRole(UserRole.teacher);
+      if (mounted) {
+        setState(() {
+          _teacherNames = {for (var t in teachers) t.id: t.name};
+          _isLoadingNames = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _isLoadingNames = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final distributedProjects = widget.projectService.projects.where((p) => 
+      p.facultyId == widget.authService.currentUser?.id && 
+      p.assistantTeacherId != null
+    ).toList();
+
+    if (distributedProjects.isEmpty) {
+      return const Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.analytics_outlined, size: 64, color: Colors.grey),
+            SizedBox(height: 16),
+            Text('No projects distributed for review yet'),
+          ],
         ),
       );
     }
+
+    // Grouping logic
+    final Map<String, List<Project>> projectsByTeacher = {};
+    for (var project in distributedProjects) {
+      final tid = project.assistantTeacherId!;
+      projectsByTeacher.putIfAbsent(tid, () => []).add(project);
+    }
+
+    // Overall stats
+    final totalAssigned = distributedProjects.length;
+    final totalApproved = distributedProjects.where((p) => p.status == ProjectStatus.approved).length;
+    final totalRejected = distributedProjects.where((p) => p.status == ProjectStatus.rejected).length;
+    final totalPending = distributedProjects.where((p) => p.status == ProjectStatus.pending).length;
+    final totalNeedsRevision = distributedProjects.where((p) => p.status == ProjectStatus.needsRevision).length;
+
+    final ColorScheme scheme = Theme.of(context).colorScheme;
+
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        // Overall Summary Card
+        Card(
+          margin: const EdgeInsets.only(bottom: 24),
+          color: scheme.primaryContainer.withOpacity(0.3),
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: BorderSide(color: scheme.primary.withOpacity(0.2)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.dashboard_customize_outlined, color: scheme.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Overall Distribution Summary',
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.bold,
+                        color: scheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    _TotalStatItem(label: 'Total', count: totalAssigned, icon: Icons.assignment_outlined),
+                    _TotalStatItem(label: 'Pending', count: totalPending, icon: Icons.timer_outlined, color: Colors.orange),
+                    _TotalStatItem(label: 'Approved', count: totalApproved, icon: Icons.check_circle_outline, color: Colors.green),
+                    _TotalStatItem(label: 'Rejected', count: totalRejected, icon: Icons.cancel_outlined, color: Colors.red),
+                    _TotalStatItem(label: 'Revision', count: totalNeedsRevision, icon: Icons.edit_note_outlined, color: Colors.blue),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        Padding(
+          padding: const EdgeInsets.only(bottom: 16),
+          child: Text(
+            'Teacher-wise Analytics',
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+          ),
+        ),
+        ...projectsByTeacher.entries.map((entry) {
+          final teacherId = entry.key;
+          final projects = entry.value;
+          final teacherName = _teacherNames[teacherId] ?? 'Loading...';
+          
+          final approved = projects.where((p) => p.status == ProjectStatus.approved).length;
+          final rejected = projects.where((p) => p.status == ProjectStatus.rejected).length;
+          final pending = projects.where((p) => p.status == ProjectStatus.pending).length;
+          final needsRevision = projects.where((p) => p.status == ProjectStatus.needsRevision).length;
+
+          return Card(
+            margin: const EdgeInsets.only(bottom: 16),
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: BorderSide(color: scheme.outlineVariant.withOpacity(0.5)),
+            ),
+            child: ExpansionTile(
+              leading: CircleAvatar(
+                backgroundColor: scheme.primaryContainer,
+                child: Text(teacherName[0].toUpperCase(), style: TextStyle(color: scheme.onPrimaryContainer)),
+              ),
+              title: Text(teacherName, style: const TextStyle(fontWeight: FontWeight.bold)),
+              subtitle: Text('${projects.length} Projects Assigned'),
+              childrenPadding: const EdgeInsets.all(16),
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceAround,
+                  children: [
+                    _TeacherStatItem(label: 'Pending', count: pending, color: Colors.orange),
+                    _TeacherStatItem(label: 'Approved', count: approved, color: Colors.green),
+                    _TeacherStatItem(label: 'Rejected', count: rejected, color: Colors.red),
+                    _TeacherStatItem(label: 'Revision', count: needsRevision, color: Colors.blue),
+                  ],
+                ),
+                const Divider(height: 32),
+                const Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text('Recent Assignments', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
+                ),
+                const SizedBox(height: 8),
+                ...projects.take(3).map((p) => ListTile(
+                  dense: true,
+                  title: Text(p.title, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: Text('Status: ${p.status.displayName}'),
+                  trailing: const Icon(Icons.chevron_right, size: 16),
+                  onTap: () {
+                    Navigator.of(context).push(
+                      MaterialPageRoute(builder: (context) => ProjectDetailScreen(
+                        project: p,
+                        projectService: widget.projectService,
+                      )),
+                    );
+                  },
+                )),
+              ],
+            ),
+          );
+        }),
+      ],
+    );
+  }
+}
+
+class _TeacherStatItem extends StatelessWidget {
+  const _TeacherStatItem({
+    required this.label,
+    required this.count,
+    required this.color,
+  });
+
+  final String label;
+  final int count;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          count.toString(),
+          style: Theme.of(context).textTheme.titleLarge?.copyWith(
+            color: color,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: color.withOpacity(0.8),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TotalStatItem extends StatelessWidget {
+  const _TotalStatItem({
+    required this.label,
+    required this.count,
+    required this.icon,
+    this.color,
+  });
+
+  final String label;
+  final int count;
+  final IconData icon;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, size: 20, color: color ?? Theme.of(context).colorScheme.onSurfaceVariant),
+        const SizedBox(height: 4),
+        Text(
+          count.toString(),
+          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.labelSmall?.copyWith(
+            color: color?.withOpacity(0.8),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TeacherMoreTab extends StatelessWidget {
+  const _TeacherMoreTab({required this.projectService, required this.authService});
+  final ProjectService projectService;
+  final AuthService authService;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        ListTile(
+          leading: const Icon(Icons.comment),
+          title: const Text('My Reviews'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => Scaffold(
+              appBar: AppBar(title: const Text('My Reviews')),
+              body: _MyReviewsTab(projectService: projectService, authService: authService),
+            )
+          )),
+        ),
+        const Divider(),
+        ListTile(
+          leading: const Icon(Icons.archive),
+          title: const Text('Archives'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const SemesterArchiveScreen(),
+          )),
+        ),
+      ],
+    );
   }
 }

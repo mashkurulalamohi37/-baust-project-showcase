@@ -138,7 +138,7 @@ class _TeacherDashboardScreenState extends State<TeacherDashboardScreen> {
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text('${project.category.displayName} • ${project.year} • By ${project.authorName}'),
+                        Text('${project.category.displayName} • ${project.year} • By ${project.isGroupProject ? project.authorName : ((project.studentName != null && project.studentName!.isNotEmpty) ? project.studentName! : project.authorName)}'),
                         Text(project.abstract, maxLines: 2, overflow: TextOverflow.ellipsis),
                       ],
                     ),
@@ -387,7 +387,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                     subtitle: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        Text('${project.category.displayName} • ${project.year} • By ${project.authorName}'),
+                        Text('${project.category.displayName} • ${project.year} • By ${project.isGroupProject ? project.authorName : ((project.studentName != null && project.studentName!.isNotEmpty) ? project.studentName! : project.authorName)}'),
                         Text('Status: ${project.status.displayName}'),
                       ],
                     ),

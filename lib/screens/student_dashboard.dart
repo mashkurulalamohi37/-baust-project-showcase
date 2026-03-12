@@ -819,7 +819,7 @@ class _ProjectCard extends StatelessWidget {
                   // Author
                   Expanded(
                     child: Text(
-                      'By ${project.authorName}',
+                      'By ${project.isGroupProject ? project.authorName : ((project.studentName != null && project.studentName!.isNotEmpty) ? project.studentName! : project.authorName)}${!project.isGroupProject && project.batch != null ? ' (Batch: ${project.batch})' : ''}',
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: scheme.onSurface.withOpacity(0.7),
                       ),

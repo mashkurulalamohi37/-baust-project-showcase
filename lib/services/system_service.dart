@@ -8,9 +8,13 @@ class SystemService extends ChangeNotifier {
   SystemService._internal();
 
   bool _autoApprovalEnabled = false;
+  String? _primaryTeacherId;
+  String? _primaryTeacherName;
   bool _isLoading = false;
 
   bool get autoApprovalEnabled => _autoApprovalEnabled;
+  String? get primaryTeacherId => _primaryTeacherId;
+  String? get primaryTeacherName => _primaryTeacherName;
   bool get isLoading => _isLoading;
 
   Future<void> loadSettings() async {
@@ -20,6 +24,8 @@ class SystemService extends ChangeNotifier {
     try {
       final settings = await FirestoreService.getSystemSettings();
       _autoApprovalEnabled = settings['autoApprovalEnabled'] ?? false;
+      _primaryTeacherId = settings['primaryTeacherId'];
+      _primaryTeacherName = settings['primaryTeacherName'];
     } catch (e) {
       debugPrint('Error loading system settings: $e');
     } finally {
@@ -35,6 +41,21 @@ class SystemService extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('Error updating auto-approval: $e');
+      rethrow;
+    }
+  }
+
+  Future<void> updatePrimaryTeacher(String id, String name) async {
+    try {
+      await FirestoreService.updateSystemSettings({
+        'primaryTeacherId': id,
+        'primaryTeacherName': name,
+      });
+      _primaryTeacherId = id;
+      _primaryTeacherName = name;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error updating primary teacher: $e');
       rethrow;
     }
   }

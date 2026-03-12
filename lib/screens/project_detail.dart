@@ -9,8 +9,8 @@ import '../mvc/controllers/auth_service.dart';
 import '../mvc/controllers/firestore_service.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
-import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import '../utils/youtube_web/youtube_web_shim.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
 import '../widgets/showcase_evaluation_card.dart';
 import 'student_portfolio_screen.dart';
 import 'project_form_screen.dart';
@@ -37,7 +37,9 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   bool _isSubmitting = false;
   bool _isUploading = false;
   User? _facultyUser;
-  YoutubePlayerController? _youtubeController;
+  VideoPlayerController? _videoPlayerController;
+  ChewieController? _chewieController;
+  String? _videoError;
   final GlobalKey _playerKey = GlobalKey();
 
   @override
@@ -46,60 +48,54 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     // Load reviews for this project
     widget.projectService.loadReviewsForProject(widget.project.id);
     _loadFacultyDetails();
-    _initYoutubeController();
+    _initVideoController();
   }
 
-  void _initYoutubeController() {
-    if (widget.project.youtubeUrl != null && widget.project.youtubeUrl!.isNotEmpty) {
-      String? videoId = _extractVideoId(widget.project.youtubeUrl!);
-      if (videoId != null) {
-        _youtubeController = YoutubePlayerController(
-          initialVideoId: videoId,
-          flags: const YoutubePlayerFlags(
-            autoPlay: false,
-            mute: false,
-            enableCaption: true,
-            controlsVisibleAtStart: true,
-            forceHD: false,
-          ),
-        );
+  void _initVideoController() {
+    if (widget.project.videoUrl != null && widget.project.videoUrl!.isNotEmpty) {
+      // Create Cloudinary optimized URL if it's from Cloudinary
+      String urlToPlay = widget.project.videoUrl!;
+      if (urlToPlay.contains('cloudinary.com')) {
+        // Find /upload/ and insert optimization parameters if not present
+        if (!urlToPlay.contains('/q_auto') && !urlToPlay.contains('/f_auto')) {
+          urlToPlay = urlToPlay.replaceFirst('/upload/', '/upload/q_auto,f_auto/');
+        }
       }
-    }
-  }
 
-  String? _extractVideoId(String url) {
-    if (url.trim().isEmpty) return null;
-    
-    // 1. Try standard library converter
-    String? id = YoutubePlayer.convertUrlToId(url);
-    if (id != null) return id;
-
-    // 2. Handle Shorts specifically (sometimes missed by library)
-    // Format: youtube.com/shorts/VIDEO_ID
-    final RegExp shortsRegex = RegExp(r'youtube\.com\/shorts\/([a-zA-Z0-9_-]+)');
-    final shortsMatch = shortsRegex.firstMatch(url);
-    if (shortsMatch != null && shortsMatch.groupCount >= 1) {
-      return shortsMatch.group(1);
+      _videoPlayerController = VideoPlayerController.networkUrl(Uri.parse(urlToPlay));
+      
+      _videoPlayerController!.initialize().then((_) {
+        if (mounted) {
+          setState(() {
+            _chewieController = ChewieController(
+              videoPlayerController: _videoPlayerController!,
+              aspectRatio: _videoPlayerController!.value.aspectRatio,
+              autoPlay: false,
+              looping: false,
+              showControls: true,
+              errorBuilder: (context, errorMessage) {
+                return Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Text(
+                      errorMessage,
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  ),
+                );
+              },
+            );
+          });
+        }
+      }).catchError((error) {
+        debugPrint("Video Player Error: $error");
+        if (mounted) {
+          setState(() {
+            _videoError = "Failed to load video: \$error";
+          });
+        }
+      });
     }
-    
-    // 3. Handle Live streams or other formats
-    // Format: youtube.com/live/VIDEO_ID
-    final RegExp liveRegex = RegExp(r'youtube\.com\/live\/([a-zA-Z0-9_-]+)');
-    final liveMatch = liveRegex.firstMatch(url);
-    if (liveMatch != null && liveMatch.groupCount >= 1) {
-      return liveMatch.group(1);
-    }
-
-    // 4. Fallback Regex for standard formats if library fails
-    final RegExp fallbackRegex = RegExp(r'^.*(youtu.be\/|v\/|u\/\w\/|embed\/|watch\?v=|\&v=)([^#\&\?]*).*');
-    final match = fallbackRegex.firstMatch(url);
-    if (match != null && match.groupCount >= 2) {
-      final String extracted = match.group(2)!;
-      // Filter out any potential garbage length
-      if (extracted.length == 11) return extracted;
-    }
-
-    return null;
   }
 
   Future<void> _loadFacultyDetails() async {
@@ -126,7 +122,8 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
   void dispose() {
     _commentController.dispose();
     _ratingController.dispose();
-    _youtubeController?.dispose();
+    _videoPlayerController?.dispose();
+    _chewieController?.dispose();
     super.dispose();
   }
 
@@ -205,51 +202,17 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (kIsWeb || _youtubeController == null) {
-      return LayoutBuilder(
-        builder: (context, constraints) {
-          if (constraints.maxWidth > 900) {
-            return _buildDesktopLayout(context);
-          }
-          return _buildScaffold(context);
-        },
-      );
-    }
-
-    return YoutubePlayerBuilder(
-      player: YoutubePlayer(
-        controller: _youtubeController!,
-        showVideoProgressIndicator: true,
-        progressIndicatorColor: Colors.red,
-        topActions: <Widget>[
-          const SizedBox(width: 8.0),
-          Expanded(
-            child: Text(
-              _youtubeController!.metadata.title,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 18.0,
-                overflow: TextOverflow.ellipsis,
-              ),
-              maxLines: 1,
-            ),
-          ),
-        ],
-      ),
-      builder: (context, player) {
-        return LayoutBuilder(
-          builder: (context, constraints) {
-            if (constraints.maxWidth > 900) {
-              return _buildDesktopLayout(context, player: player);
-            }
-            return _buildScaffold(context, player: player);
-          },
-        );
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        if (constraints.maxWidth > 900) {
+          return _buildDesktopLayout(context);
+        }
+        return _buildScaffold(context);
       },
     );
   }
 
-  Widget _buildDesktopLayout(BuildContext context, {Widget? player}) {
+  Widget _buildDesktopLayout(BuildContext context) {
     final project = widget.project;
     return Scaffold(
       appBar: AppBar(
@@ -303,13 +266,13 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
       ),
       body: Center(
         child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 1400),
+          constraints: const BoxConstraints(maxWidth: 1800),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Left Column: Project Details (60%)
+              // Left Column: Project Details (70%)
               Expanded(
-                flex: 6,
+                flex: 7,
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.all(24),
                   child: Column(
@@ -332,34 +295,31 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                          const SizedBox(height: 32),
                        ],
                        
-                       // YouTube
-                       if (project.youtubeUrl != null && project.youtubeUrl!.isNotEmpty) ...[
-                         Text('Project Demo', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
+                       // Uploaded Video (Cloudinary)
+                       if (project.videoUrl != null && project.videoUrl!.isNotEmpty) ...[
+                         Text('Project Video', style: Theme.of(context).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold)),
                          const SizedBox(height: 16),
-                         AspectRatio(
-                           aspectRatio: 16 / 9,
-                           child: kIsWeb
-                             ? Builder(builder: (c) {
-                                  final id = _extractVideoId(project.youtubeUrl!);
-                                  return id != null ? buildWebYoutubePlayer(id) : _buildInvalidYoutubeCard();
-                               })
-                             : player ??
-                                  (_youtubeController != null
-                                  ? YoutubePlayer(
-                                      controller: _youtubeController!,
-                                      showVideoProgressIndicator: true,
-                                      progressIndicatorColor: Colors.red,
-                                    )
-                                  : _buildInvalidYoutubeCard()),
-                          ),
-                        ],
+                         if (_chewieController != null)
+                           ConstrainedBox(
+                             constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.95),
+                             child: AspectRatio(
+                               aspectRatio: _chewieController!.videoPlayerController.value.aspectRatio,
+                               child: Chewie(controller: _chewieController!),
+                             ),
+                           )
+                         else if (_videoError != null)
+                           Center(child: Text(_videoError!, style: const TextStyle(color: Colors.red)))
+                         else
+                           const Center(child: CircularProgressIndicator()),
+                         const SizedBox(height: 32),
+                       ],
                      ],
                    ),
                  ),
                ),
                // Right Column: Meta, Reviews, Eval (40%)
                Expanded(
-                 flex: 4,
+                 flex: 3,
                  child: Container(
                    decoration: BoxDecoration(
                      border: Border(left: BorderSide(color: Theme.of(context).dividerColor)),
@@ -412,7 +372,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     );
   }
 
-  Widget _buildScaffold(BuildContext context, {Widget? player}) {
+  Widget _buildScaffold(BuildContext context) {
     final project = widget.project;
 
     return Scaffold(
@@ -490,17 +450,18 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                         const SizedBox(height: 16),
                      ],
                      
-                     if (currentProject.youtubeUrl != null && currentProject.youtubeUrl!.isNotEmpty) ...[
-                       Text('Project Demo Video', style: Theme.of(context).textTheme.titleMedium),
+                     if (currentProject.videoUrl != null && currentProject.videoUrl!.isNotEmpty) ...[
+                       Text('Project Video', style: Theme.of(context).textTheme.titleMedium),
                        const SizedBox(height: 8),
-                       if (kIsWeb)
-                         Builder(builder: (context) {
-                           final videoId = _extractVideoId(currentProject.youtubeUrl!);
-                           if (videoId != null) return buildWebYoutubePlayer(videoId);
-                           return _buildInvalidYoutubeCard();
-                         })
+                       if (_chewieController != null)
+                         AspectRatio(
+                           aspectRatio: _chewieController!.videoPlayerController.value.aspectRatio,
+                           child: Chewie(controller: _chewieController!),
+                         )
+                       else if (_videoError != null)
+                         Center(child: Text(_videoError!, style: const TextStyle(color: Colors.red)))
                        else
-                         player ?? (_youtubeController != null ? YoutubePlayer(controller: _youtubeController!, showVideoProgressIndicator: true, progressIndicatorColor: Colors.red,) : _buildInvalidYoutubeCard()),
+                         const Center(child: CircularProgressIndicator()),
                        const SizedBox(height: 16),
                      ],
                      
@@ -1447,47 +1408,6 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
     );
   }
 
-
-
-  Widget _buildInvalidYoutubeCard() {
-    return Card(
-      color: Colors.orange[50],
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            Icon(Icons.error_outline, color: Colors.orange[700]),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Invalid YouTube URL',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.orange[900],
-                    ),
-                  ),
-                  const SizedBox(height: 4),
-                  const Text(
-                    'The provided YouTube link could not be loaded.',
-                    style: TextStyle(fontSize: 12, color: Colors.orange),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-
-
-
-
-
   Widget _buildProjectHeader(BuildContext context, {bool isDesktop = false}) {
     final currentProject = widget.project;
     return Card(
@@ -1577,13 +1497,15 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     );
                   },
                   child: Text(
-                    'By ${currentProject.authorName}',
+                    'By ${currentProject.isGroupProject ? (currentProject.groupName ?? currentProject.authorName) : ((currentProject.studentName != null && currentProject.studentName!.isNotEmpty) ? currentProject.studentName! : currentProject.authorName)}',
                     style: const TextStyle(
                       decoration: TextDecoration.underline,
                       color: Colors.blue, // Make it look like a link
                     ),
                   ),
                 ),
+
+
               ],
             ),
             
@@ -1919,7 +1841,11 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
         const SizedBox(height: 24),
         
         // Student Info
-        if (!project.isGroupProject && project.studentId != null) ...[
+        if (!project.isGroupProject && 
+            (project.studentId != null || 
+             project.batch != null || 
+             project.level != null || 
+             project.term != null)) ...[
           Card(
             margin: EdgeInsets.zero,
             child: Padding(
@@ -1940,10 +1866,56 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                     ],
                   ),
                   const Divider(),
-                  _buildInfoRow('Student ID', project.studentId ?? 'N/A'),
-                  if (project.batch != null) _buildInfoRow('Batch', project.batch.toString()),
-                  if (project.level != null) _buildInfoRow('Level', project.level.toString()),
-                  if (project.term != null) _buildInfoRow('Term', project.term.toString()),
+                  Card(
+                    margin: const EdgeInsets.only(top: 8),
+                    elevation: 0,
+                    color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    child: ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Theme.of(context).colorScheme.onPrimary,
+                        child: const Text('1'),
+                      ),
+                      title: project.studentName != null && project.studentName!.isNotEmpty
+                          ? Text(
+                              project.studentName!,
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            )
+                          : null,
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (project.studentId != null && project.studentId!.isNotEmpty) ...[
+                            Text(
+                              'ID: ${project.studentId}',
+                              style: TextStyle(
+                                color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                fontSize: 12,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                          ],
+                          if (project.batch != null || project.level != null || project.term != null)
+                            Row(
+                              children: [
+                                if (project.batch != null) ...[
+                                  _buildBadge('Batch ${project.batch}'),
+                                  const SizedBox(width: 4),
+                                ],
+                                if (project.level != null) ...[
+                                  _buildBadge('Level ${project.level}'),
+                                  const SizedBox(width: 4),
+                                ],
+                                if (project.term != null) ...[
+                                  _buildBadge('Term ${project.term}'),
+                                ],
+                              ],
+                            ),
+                        ],
+                      ),
+                      dense: true,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -1997,7 +1969,28 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                             child: Text('${index + 1}'),
                           ),
                           title: Text(member.name, style: const TextStyle(fontWeight: FontWeight.bold)),
-                          subtitle: Text('ID: ${member.id}'),
+                          subtitle: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'ID: ${member.id}',
+                                style: TextStyle(
+                                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                                  fontSize: 12,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Row(
+                                children: [
+                                  _buildBadge('Batch ${member.batch}'),
+                                  const SizedBox(width: 4),
+                                  _buildBadge('Level ${member.level}'),
+                                  const SizedBox(width: 4),
+                                  _buildBadge('Term ${member.term}'),
+                                ],
+                              ),
+                            ],
+                          ),
                           dense: true,
                         ),
                       );
@@ -2031,6 +2024,7 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
                 icon: const Icon(Icons.picture_as_pdf),
                 label: const Text('Open PDF'),
               ),
+
             if (project.githubUrl != null && project.githubUrl!.isNotEmpty)
               OutlinedButton.icon(
                 onPressed: () => _openGitHub(project.githubUrl!),
@@ -2040,6 +2034,24 @@ class _ProjectDetailScreenState extends State<ProjectDetailScreen> {
           ],
         ),
       ],
+    );
+  }
+
+  Widget _buildBadge(String label) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.primaryContainer,
+        borderRadius: BorderRadius.circular(4),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context).colorScheme.onPrimaryContainer,
+        ),
+      ),
     );
   }
 
@@ -2182,79 +2194,6 @@ class RatingBar extends StatelessWidget {
   }
 }
 
-class CustomYoutubePlayerBuilder extends StatefulWidget {
-  final Widget player;
-  final Widget Function(BuildContext, Widget) builder;
-  final YoutubePlayerController controller;
-
-  const CustomYoutubePlayerBuilder({
-    Key? key,
-    required this.player,
-    required this.builder,
-    required this.controller,
-  }) : super(key: key);
-
-  @override
-  State<CustomYoutubePlayerBuilder> createState() =>
-      _CustomYoutubePlayerBuilderState();
-}
-
-class _CustomYoutubePlayerBuilderState extends State<CustomYoutubePlayerBuilder> {
-  bool _isFullScreen = false;
-
-  @override
-  void initState() {
-    super.initState();
-    widget.controller.addListener(_listener);
-  }
-
-  @override
-  void dispose() {
-    widget.controller.removeListener(_listener);
-    super.dispose();
-  }
-
-  void _listener() {
-    if (widget.controller.value.isFullScreen && !_isFullScreen) {
-      if (mounted) {
-        setState(() => _isFullScreen = true);
-        _pushFullScreen();
-      }
-    } else if (!widget.controller.value.isFullScreen && _isFullScreen) {
-      if (mounted) {
-        setState(() => _isFullScreen = false);
-        Navigator.of(context).maybePop();
-      }
-    }
-  }
-
-  void _pushFullScreen() {
-    Navigator.of(context).push(
-      PageRouteBuilder(
-        pageBuilder: (_, __, ___) => Scaffold(
-          backgroundColor: Colors.black,
-          body: Center(child: widget.player),
-        ),
-        transitionsBuilder: (_, a, __, c) => FadeTransition(opacity: a, child: c),
-      ),
-    ).then((_) {
-      if (mounted) {
-        if (widget.controller.value.isFullScreen) {
-          widget.controller.toggleFullScreenMode();
-        }
-        setState(() => _isFullScreen = false);
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    if (_isFullScreen) {
-      return widget.builder(context, Container(color: Colors.black));
-    }
-    return widget.builder(context, widget.player);
-  }
-}
 
 class _RevisionUploadDialog extends StatefulWidget {
   const _RevisionUploadDialog({

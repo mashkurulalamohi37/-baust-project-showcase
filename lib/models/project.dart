@@ -12,6 +12,7 @@ class Project {
   final double rating;
   final int reviewCount;
   final List<String> imageUrls;
+  final String? videoUrl;
   final String? pdfUrl;
   final String? githubUrl;
   final List<String> tags;
@@ -41,6 +42,7 @@ class Project {
     this.rating = 0.0,
     this.reviewCount = 0,
     this.imageUrls = const [],
+    this.videoUrl,
     this.pdfUrl,
     this.githubUrl,
     this.tags = const [],
@@ -71,6 +73,7 @@ class Project {
     double? rating,
     int? reviewCount,
     List<String>? imageUrls,
+    String? videoUrl,
     String? pdfUrl,
     String? githubUrl,
     List<String>? tags,
@@ -97,6 +100,7 @@ class Project {
       rating: rating ?? this.rating,
       reviewCount: reviewCount ?? this.reviewCount,
       imageUrls: imageUrls ?? this.imageUrls,
+      videoUrl: videoUrl ?? this.videoUrl,
       pdfUrl: pdfUrl ?? this.pdfUrl,
       githubUrl: githubUrl ?? this.githubUrl,
       tags: tags ?? this.tags,
@@ -126,6 +130,7 @@ class Project {
       'rating': rating,
       'reviewCount': reviewCount,
       'imageUrls': imageUrls,
+      'videoUrl': videoUrl,
       'pdfUrl': pdfUrl,
       'githubUrl': githubUrl,
       'tags': tags,

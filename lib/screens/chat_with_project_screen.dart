@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:projectshowcase/mvc/models/project.dart';
 import 'package:projectshowcase/services/gemini_service.dart';
 import 'package:projectshowcase/utils/pdf_text_extractor.dart';
-import 'package:projectshowcase/utils/youtube_transcript_extractor.dart';
 
 class ChatWithProjectScreen extends StatefulWidget {
   final Project project;
@@ -30,7 +29,6 @@ class _ChatWithProjectScreenState extends State<ChatWithProjectScreen> {
   // Track what sources were loaded
   bool _hasAbstract = false;
   bool _hasPdf = false;
-  bool _hasYoutube = false;
 
   @override
   void initState() {
@@ -66,20 +64,6 @@ class _ChatWithProjectScreenState extends State<ChatWithProjectScreen> {
           loadedSources.add('PDF Documentation');
         } catch (e) {
           debugPrint('Failed to load PDF: $e');
-        }
-      }
-
-      // 3. Try to load YouTube transcript
-      if (widget.project.youtubeUrl != null && widget.project.youtubeUrl!.isNotEmpty) {
-        try {
-          final transcript = await YoutubeTranscriptExtractor.extractFromUrl(widget.project.youtubeUrl!);
-          contextBuffer.writeln('=== PROJECT DEMO VIDEO TRANSCRIPT ===');
-          contextBuffer.writeln(transcript);
-          contextBuffer.writeln();
-          _hasYoutube = true;
-          loadedSources.add('YouTube Demo');
-        } catch (e) {
-          debugPrint('Failed to load YouTube transcript: $e');
         }
       }
 
@@ -254,7 +238,7 @@ class _ChatWithProjectScreenState extends State<ChatWithProjectScreen> {
             const Text('Loading project content...'),
             const SizedBox(height: 8),
             Text(
-              'Abstract${widget.project.pdfUrl != null ? ' • PDF' : ''}${widget.project.youtubeUrl != null ? ' • YouTube' : ''}',
+              'Abstract${widget.project.pdfUrl != null ? ' • PDF' : ''}',
               style: const TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ],

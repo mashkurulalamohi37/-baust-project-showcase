@@ -1,6 +1,4 @@
 import 'package:flutter/foundation.dart';
-import 'dart:typed_data';
-import 'dart:io';
 import '../models/project.dart';
 import '../models/review.dart';
 import '../models/user.dart';
@@ -9,6 +7,7 @@ import 'firestore_service.dart';
 import 'notification_service.dart';
 import 'auth_service.dart';
 import '../../services/email_service.dart';
+import '../../services/imagekit_service.dart';
 
 class ProjectService extends ChangeNotifier {
   // Singleton instance so project data is shared app-wide
@@ -90,12 +89,21 @@ class ProjectService extends ChangeNotifier {
     await _loadProjects(force: true);
   }
 
-  Future<bool> createProject(Project project, {Uint8List? pdfBytes, List<Uint8List>? imageBytes, String? pdfPath, List<String>? imagePaths}) async {
+  Future<bool> createProject(
+    Project project, {
+    Uint8List? pdfBytes,
+    List<Uint8List>? imageBytes,
+    Uint8List? videoBytes,
+    String? pdfPath,
+    List<String>? imagePaths,
+    String? videoPath,
+    Function(double)? onProgress,
+    Function(String type, String url)? onFileUploaded,
+  }) async {
     debugPrint('ProjectService: Starting project creation for ${project.title}');
     
     try {
-      // Check for duplicate projects (same title by same author with pending/draft status)
-      // Allow duplicates if the existing project is approved/rejected (user can resubmit)
+      // Check for duplicate projects
       final duplicateProject = _projects.where((p) => 
         p.title.toLowerCase() == project.title.toLowerCase() && 
         p.authorId == project.authorId &&
@@ -103,89 +111,93 @@ class ProjectService extends ChangeNotifier {
       ).firstOrNull;
       
       if (duplicateProject != null) {
-        debugPrint('ProjectService: Duplicate project found with title: ${project.title} (status: ${duplicateProject.status})');
-        _lastUploadError = 'A project with the title "${project.title}" is already pending. Please use a different title or wait for the existing project to be reviewed.';
+        _lastUploadError = 'A project with the title "${project.title}" is already pending.';
         return false;
       }
       
-      // Upload files to Firebase Storage
+      // Calculate total bytes for progress weighting
+      double totalBytes = 0;
+      if (pdfBytes != null) totalBytes += pdfBytes.length;
+      if (imageBytes != null) for (var b in imageBytes) totalBytes += b.length;
+      if (videoBytes != null) totalBytes += videoBytes.length;
+      
+      double bytesUploaded = 0;
+      void updateProgress(double fileProgress, double fileWeight) {
+        if (onProgress != null && totalBytes > 0) {
+          onProgress((bytesUploaded + (fileProgress * fileWeight)) / totalBytes);
+        }
+      }
+
       List<String> imageUrls = [];
       String? pdfUrl;
+      String? videoUrl;
       
-      // Upload PDF if provided
-      bool pdfUploadRequired = (project.pdfUrl != null && project.pdfUrl!.isNotEmpty) || pdfBytes != null || pdfPath != null;
-      bool pdfUploadFailed = false;
-      
-      if (pdfUploadRequired) {
-        debugPrint('ProjectService: Uploading PDF file');
-        try {
-          debugPrint('ProjectService: Using Cloudinary for PDF upload');
-          pdfUrl = await FirestoreService.uploadFile(
-            pdfPath ?? project.pdfUrl ?? '', // local path or existing url
-            'projects/${project.id}/project_${DateTime.now().millisecondsSinceEpoch}.pdf',
-            data: pdfBytes,
-          );
-          if (pdfUrl != null) {
-            debugPrint('ProjectService: PDF uploaded to Firebase: $pdfUrl');
-          } else {
-            final errorMsg = 'PDF upload failed';
-            debugPrint('ProjectService: PDF upload returned null');
-            debugPrint('ProjectService: Error message: $errorMsg');
-            pdfUploadFailed = true;
-            // Store error for display
-            _lastUploadError = errorMsg ?? 'PDF upload failed. Check Firebase configuration.';
-          }
-          
-          if (pdfUrl == null) {
-            pdfUploadFailed = true;
-            debugPrint('ProjectService: ERROR - Failed to upload PDF!');
-            debugPrint('ProjectService: This means the PDF will not be accessible. Please check:');
-            debugPrint('  1. Firebase Storage bucket exists and is configured');
-            debugPrint('  2. Storage rules allow upload operations');
-            debugPrint('  3. Firebase is properly initialized');
-            debugPrint('  4. Check console logs above for specific error messages');
-          } else {
-            debugPrint('ProjectService: PDF uploaded successfully: $pdfUrl');
-          }
-        } catch (e, stackTrace) {
-          pdfUploadFailed = true;
-          final errorString = e.toString();
-          debugPrint('ProjectService: ERROR uploading PDF: $e');
-          debugPrint('ProjectService: Stack trace: $stackTrace');
-          debugPrint('ProjectService: Exception details: $errorString');
-          // Store the actual error message
-          _lastUploadError = errorString.replaceAll('Exception: ', '').replaceAll('Error: ', '');
-          if (_lastUploadError?.isEmpty ?? true) {
-            _lastUploadError = 'PDF upload failed. Please check Firebase Storage configuration.';
-          }
+      // 1. Upload PDF
+      bool hasExistingPdf = project.pdfUrl != null && project.pdfUrl!.startsWith('http');
+      if ((pdfBytes != null || pdfPath != null) && !hasExistingPdf) {
+        pdfUrl = await FirestoreService.uploadFile(
+          pdfPath ?? '', 
+          'projects/${project.id}/project_${DateTime.now().millisecondsSinceEpoch}.pdf',
+          data: pdfBytes,
+          onProgress: (p) => updateProgress(p, pdfBytes?.length.toDouble() ?? 0),
+        );
+        if (pdfUrl != null) {
+          bytesUploaded += pdfBytes?.length ?? 0;
+          if (onFileUploaded != null) onFileUploaded('pdf', pdfUrl);
         }
-      } else {
-        debugPrint('ProjectService: No PDF to upload');
+      } else if (hasExistingPdf) {
+        pdfUrl = project.pdfUrl;
+        bytesUploaded += pdfBytes?.length ?? 0;
+        debugPrint('ProjectService: Skipping PDF upload, using: $pdfUrl');
       }
-      
-      // If PDF upload failed, throw an error to prevent saving project
-      if (pdfUploadFailed) {
-        final errorMsg = _lastUploadError ?? 'PDF upload failed. Please check Firebase configuration and try again.';
-        throw Exception(errorMsg);
-      }
-      
-      // Upload images if provided
-      if (project.imageUrls.isNotEmpty || (imageBytes != null && imageBytes.isNotEmpty) || (imagePaths != null && imagePaths.isNotEmpty)) {
-        debugPrint('ProjectService: Uploading image(s)');
-        
+
+      // 2. Upload Images
+      bool hasExistingImages = project.imageUrls.isNotEmpty && project.imageUrls.every((url) => url.startsWith('http'));
+      if (((imageBytes != null && imageBytes.isNotEmpty) || (imagePaths != null && imagePaths.isNotEmpty)) && !hasExistingImages) {
         final uploadedUrls = await FirestoreService.uploadMultipleFiles(
-          imagePaths ?? project.imageUrls,
+          imagePaths ?? [],
           'projects/${project.id}',
           dataList: imageBytes,
+          onProgress: (p) {
+            double totalImageBytes = imageBytes?.fold(0.0, (sum, b) => sum! + b.length) ?? 0;
+            updateProgress(p, totalImageBytes);
+          },
         );
         imageUrls.addAll(uploadedUrls);
-        debugPrint('ProjectService: Uploaded ${uploadedUrls.length} images to Firebase');
+        bytesUploaded += imageBytes?.fold(0, (sum, b) => sum! + b.length) ?? 0;
+        if (onFileUploaded != null) {
+          for (var url in uploadedUrls) onFileUploaded('image', url);
+        }
+      } else if (hasExistingImages) {
+        imageUrls = project.imageUrls;
+        bytesUploaded += imageBytes?.fold(0, (sum, b) => sum! + b.length) ?? 0;
+        debugPrint('ProjectService: Skipping Image uploads, using existing URLs');
+      }
+
+      // 3. Upload Video
+      bool hasExistingVideo = project.videoUrl != null && project.videoUrl!.startsWith('http');
+      if ((videoBytes != null || videoPath != null) && !hasExistingVideo) {
+        videoUrl = await ImageKitService.uploadVideo(
+          (videoPath != null && videoPath.isNotEmpty) ? videoPath : 'video.mp4',
+          data: videoBytes,
+          folder: 'projects/${project.id}/videos',
+          onProgress: (p) => updateProgress(p, videoBytes?.length.toDouble() ?? 0),
+        );
+        if (videoUrl != null) {
+          bytesUploaded += videoBytes?.length ?? 0;
+          if (onFileUploaded != null) onFileUploaded('video', videoUrl);
+        }
+      } else if (hasExistingVideo) {
+        videoUrl = project.videoUrl;
+        bytesUploaded += videoBytes?.length ?? 0;
+        debugPrint('ProjectService: Skipping Video upload, using: $videoUrl');
       }
       
       // Create project with uploaded file URLs
       final projectWithUrls = project.copyWith(
         imageUrls: imageUrls,
         pdfUrl: pdfUrl,
+        videoUrl: videoUrl,
       );
       
       debugPrint('ProjectService: Saving project to Firestore');
@@ -234,43 +246,103 @@ class ProjectService extends ChangeNotifier {
     } catch (e) {
       debugPrint('ProjectService: Error creating project: $e');
       debugPrint('ProjectService: Stack trace: ${StackTrace.current}');
+      _lastUploadError = _lastUploadError ?? e.toString().replaceAll('Exception: ', '').replaceAll('Error: ', '');
+      if (_lastUploadError!.isEmpty) _lastUploadError = 'Failed to create project. Please try again.';
       return false;
     }
   }
 
-  Future<bool> updateProjectWithFiles(Project project, {Uint8List? pdfBytes, List<Uint8List>? imageBytes, String? pdfPath, List<String>? imagePaths}) async {
+  Future<bool> updateProjectWithFiles(
+    Project project, {
+    Uint8List? pdfBytes,
+    List<Uint8List>? imageBytes,
+    Uint8List? videoBytes,
+    String? pdfPath,
+    List<String>? imagePaths,
+    String? videoPath,
+    Function(double)? onProgress,
+    Function(String type, String url)? onFileUploaded,
+  }) async {
     debugPrint('ProjectService: Updating project ${project.id}');
     
     try {
+      // Calculate total bytes for progress weighting
+      double totalBytes = 0;
+      if (pdfBytes != null) totalBytes += pdfBytes.length;
+      if (imageBytes != null) for (var b in imageBytes) totalBytes += b.length;
+      if (videoBytes != null) totalBytes += videoBytes.length;
+      
+      double bytesUploaded = 0;
+      void updateProgress(double fileProgress, double fileWeight) {
+        if (onProgress != null && totalBytes > 0) {
+          onProgress((bytesUploaded + (fileProgress * fileWeight)) / totalBytes);
+        }
+      }
+
       List<String> imageUrls = List.from(project.imageUrls);
       String? pdfUrl = project.pdfUrl;
+      String? videoUrl = project.videoUrl;
       
-      // 1. Handle PDF Upload if bytes or path provided
-      if (pdfBytes != null || pdfPath != null) {
-        debugPrint('ProjectService: Uploading new PDF for update');
+      // 1. Handle PDF Upload (Skip if network URL already present)
+      bool hasExistingPdf = pdfUrl != null && pdfUrl.startsWith('http');
+      if ((pdfBytes != null || pdfPath != null) && !hasExistingPdf) {
         pdfUrl = await FirestoreService.uploadFile(
-          pdfPath ?? '', // true path if mobile, empty if web
+          pdfPath ?? '',
           'projects/${project.id}/project_${DateTime.now().millisecondsSinceEpoch}.pdf',
           data: pdfBytes,
+          onProgress: (p) => updateProgress(p, pdfBytes?.length.toDouble() ?? 0),
         );
+        if (pdfUrl != null) {
+          bytesUploaded += pdfBytes?.length ?? 0;
+          if (onFileUploaded != null) onFileUploaded('pdf', pdfUrl);
+        }
+      } else if (hasExistingPdf && (pdfBytes != null || pdfPath != null)) {
+        bytesUploaded += pdfBytes?.length ?? 0;
       }
       
-      // 2. Handle Image Uploads if bytes OR paths provided
-      if ((imageBytes != null && imageBytes.isNotEmpty) || (imagePaths != null && imagePaths.isNotEmpty)) {
-        debugPrint('ProjectService: Uploading new images for update');
+      // 2. Handle Image Uploads (Skip if network URLs already present)
+      bool hasExistingImages = imageUrls.isNotEmpty && imageUrls.every((url) => url.startsWith('http'));
+      if (((imageBytes != null && imageBytes.isNotEmpty) || (imagePaths != null && imagePaths.isNotEmpty)) && !hasExistingImages) {
         final uploadedUrls = await FirestoreService.uploadMultipleFiles(
-          imagePaths ?? [], // No local paths on web/bytes
+          imagePaths ?? [],
           'projects/${project.id}',
           dataList: imageBytes,
+          onProgress: (p) {
+            double totalImageBytes = imageBytes?.fold(0.0, (sum, b) => sum! + b.length) ?? 0;
+            updateProgress(p, totalImageBytes);
+          },
         );
-        // If we want to replace existing images (as per my ProjectFormScreen logic):
         imageUrls = uploadedUrls;
-        // If we wanted to append: imageUrls.addAll(uploadedUrls);
+        bytesUploaded += imageBytes?.fold(0, (sum, b) => sum! + b.length) ?? 0;
+        if (onFileUploaded != null) {
+          for (var url in uploadedUrls) onFileUploaded('image', url);
+        }
+      } else if (hasExistingImages && imageBytes != null) {
+        bytesUploaded += imageBytes.fold(0, (sum, b) => sum! + b.length) ?? 0;
+      }
+
+      // 3. Handle Video Upload (Skip if network URL already present)
+      bool hasExistingVideo = videoUrl != null && videoUrl.startsWith('http');
+      if ((videoBytes != null || videoPath != null) && !hasExistingVideo) {
+        final newVideoUrl = await ImageKitService.uploadVideo(
+          (videoPath != null && videoPath.isNotEmpty) ? videoPath : 'video.mp4',
+          data: videoBytes,
+          folder: 'projects/${project.id}/videos',
+          onProgress: (p) => updateProgress(p, videoBytes?.length.toDouble() ?? 0),
+        );
+        if (newVideoUrl != null) {
+          videoUrl = newVideoUrl;
+          bytesUploaded += videoBytes?.length ?? 0;
+          if (onFileUploaded != null) onFileUploaded('video', videoUrl);
+        }
+      } else if (hasExistingVideo && videoBytes != null) {
+        bytesUploaded += videoBytes.length;
       }
       
       final updatedProject = project.copyWith(
         pdfUrl: pdfUrl,
         imageUrls: imageUrls,
+        videoUrl: videoUrl,
         updatedAt: DateTime.now(),
       );
       
@@ -289,6 +361,8 @@ class ProjectService extends ChangeNotifier {
       return true;
     } catch (e) {
       debugPrint('ProjectService: Error updating project with files: $e');
+      _lastUploadError = e.toString().replaceAll('Exception: ', '').replaceAll('Error: ', '');
+      if (_lastUploadError!.isEmpty) _lastUploadError = 'Failed to update project. Please try again.';
       return false;
     }
   }
@@ -764,10 +838,6 @@ class ProjectService extends ChangeNotifier {
 
   // Storage provider: Using Firebase Storage
 
-  // Helper method to upload files to Firebase Storage
-  Future<String?> _uploadFile(String filePath, String folder, String extension) async {
-    return await _uploadFileToFirebase(filePath, folder, extension);
-  }
 
   // Upload to Firebase Storage
   Future<String?> _uploadFileToFirebase(String filePath, String folder, String extension) async {
@@ -866,7 +936,7 @@ class ProjectService extends ChangeNotifier {
         facultyName: existingProject.facultyName,
       );
 
-      debugPrint('ProjectService: Creating revision for project ${projectId}');
+      debugPrint('ProjectService: Creating revision for project $projectId');
       debugPrint('ProjectService: Status changed from ${existingProject.status} to ${revisedProject.status}');
       debugPrint('ProjectService: Version incremented from ${existingProject.version} to ${revisedProject.version}');
       debugPrint('ProjectService: Preserving facultyId: ${revisedProject.facultyId}');

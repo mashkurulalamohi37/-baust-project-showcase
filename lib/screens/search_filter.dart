@@ -13,6 +13,7 @@ class SearchFilterScreen extends StatefulWidget {
 
 class _SearchFilterScreenState extends State<SearchFilterScreen> {
   final ProjectService _projectService = ProjectService();
+  final AuthService _authService = AuthService();
   final _searchController = TextEditingController();
   final _supervisorController = TextEditingController();
   
@@ -25,7 +26,18 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
   @override
   void initState() {
     super.initState();
-    _filteredProjects = _projectService.projects;
+    _applyInitialFilter();
+  }
+
+  void _applyInitialFilter() {
+    final currentUser = _authService.currentUser;
+    final isAdminOrTeacher = _authService.isAdmin || _authService.isTeacher;
+    _filteredProjects = _projectService.projects.where((project) {
+      if (project.status == ProjectStatus.approved) return true;
+      if (isAdminOrTeacher) return true;
+      // Removed: if (currentUser != null && project.authorId == currentUser.id) return true;
+      return false;
+    }).toList();
   }
 
   @override
@@ -38,8 +50,22 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
   void _performSearch() {
     setState(() {
       _hasSearched = true;
+      final currentUser = _authService.currentUser;
+      final isAdminOrTeacher = _authService.isAdmin || _authService.isTeacher;
+
       _filteredProjects = _projectService.projects.where((project) {
-        // Text search
+        // 1. Status/Visibility check
+        bool isVisible = false;
+        if (project.status == ProjectStatus.approved) {
+          isVisible = true;
+        } else if (isAdminOrTeacher) {
+          isVisible = true;
+        }
+        // Removed: else if (currentUser != null && project.authorId == currentUser.id)
+
+        if (!isVisible) return false;
+
+        // 2. Text search
         final searchQuery = _searchController.text.toLowerCase();
         final matchesSearch = searchQuery.isEmpty ||
             project.title.toLowerCase().contains(searchQuery) ||
@@ -47,16 +73,16 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
             project.authorName.toLowerCase().contains(searchQuery) ||
             project.tags.any((tag) => tag.toLowerCase().contains(searchQuery));
 
-        // Category filter
+        // 3. Category filter
         final matchesCategory = _selectedCategory == null || project.category == _selectedCategory;
 
-        // Year filter
+        // 4. Year filter
         final matchesYear = _selectedYear == null || project.year == _selectedYear;
 
-        // Semester filter
+        // 5. Semester filter
         final matchesSemester = _selectedSemester == null || project.semester == _selectedSemester;
 
-        // Supervisor filter
+        // 6. Supervisor filter
         final supervisorQuery = _supervisorController.text.toLowerCase();
         final matchesSupervisor = supervisorQuery.isEmpty ||
             (project.facultyName?.toLowerCase().contains(supervisorQuery) ?? false);
@@ -74,7 +100,7 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
       _selectedYear = null;
       _selectedSemester = null;
       _hasSearched = false;
-      _filteredProjects = _projectService.projects;
+      _applyInitialFilter();
     });
   }
 
@@ -94,6 +120,20 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
       body: AnimatedBuilder(
         animation: _projectService,
         builder: (context, child) {
+          final currentUser = _authService.currentUser;
+          final isAdminOrTeacher = _authService.isAdmin || _authService.isTeacher;
+
+          // Reactively filter all projects based on visibility
+          final allVisibleProjects = _projectService.projects.where((project) {
+            if (project.status == ProjectStatus.approved) return true;
+            if (isAdminOrTeacher) return true;
+            // Removed: if (currentUser != null && project.authorId == currentUser.id) return true;
+            return false;
+          }).toList();
+
+          // Apply search filters to the visible set
+          final projectsToDisplay = _hasSearched ? _filteredProjects : allVisibleProjects;
+
           return ListView(
             padding: const EdgeInsets.all(16),
             children: <Widget>[
@@ -241,10 +281,10 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: <Widget>[
                   Text(
-                    'Results (${_filteredProjects.length})',
+                    'Results (${projectsToDisplay.length})',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
-                  if (_filteredProjects.isNotEmpty)
+                  if (projectsToDisplay.isNotEmpty)
                     DropdownButton<String>(
                       hint: const Text('Sort by'),
                       items: const <DropdownMenuItem<String>>[
@@ -277,7 +317,7 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
               const SizedBox(height: 8),
               
               // Project List
-              if (_filteredProjects.isEmpty && _hasSearched)
+              if (projectsToDisplay.isEmpty && _hasSearched)
                 const Center(
                   child: Padding(
                     padding: EdgeInsets.all(32),
@@ -292,7 +332,7 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
                     ),
                   ),
                 )
-              else if (_filteredProjects.isEmpty)
+              else if (projectsToDisplay.isEmpty)
                 const Center(
                   child: Padding(
                     padding: EdgeInsets.all(32),
@@ -308,7 +348,7 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
                   ),
                 )
               else
-                ..._filteredProjects.map((project) => Card(
+                ...projectsToDisplay.map((project) => Card(
                   margin: const EdgeInsets.symmetric(vertical: 4),
                   child: ListTile(
                     title: Text(project.title),
@@ -344,7 +384,7 @@ class _SearchFilterScreenState extends State<SearchFilterScreen> {
                             const SizedBox(width: 16),
                             Flexible(
                               child: Text(
-                                'By ${project.authorName}',
+                                'By ${project.isGroupProject ? project.authorName : ((project.studentName != null && project.studentName!.isNotEmpty) ? project.studentName! : project.authorName)}${!project.isGroupProject && project.batch != null ? ' (Batch: ${project.batch})' : ''}',
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),

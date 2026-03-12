@@ -163,19 +163,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
           label: 'Analytics',
         ),
         NavigationDestination(
-          icon: Icon(Icons.settings_outlined),
-          selectedIcon: Icon(Icons.settings),
-          label: 'Settings',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.archive_outlined),
-          selectedIcon: Icon(Icons.archive),
-          label: 'Archives',
-        ),
-        NavigationDestination(
-          icon: Icon(Icons.campaign_outlined),
-          selectedIcon: Icon(Icons.campaign),
-          label: 'Announcements',
+          icon: Icon(Icons.menu),
+          selectedIcon: Icon(Icons.menu_open),
+          label: 'More',
         ),
       ],
       body: AnimatedBuilder(
@@ -200,7 +190,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                 initialQuery: _pendingProjectFilter,
               ),
               SemesterAnalyticsBody(projectService: _projectService),
-              _SystemSettingsTab(
+              _AdminMoreTab(
                 projectService: _projectService, 
                 authService: _authService,
                 systemService: _systemService,
@@ -212,8 +202,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                   });
                 },
               ),
-              const SemesterArchiveScreen(),
-              const _AnnouncementManagementTab(),
             ],
           );
         },
@@ -851,6 +839,25 @@ class _SystemSettingsTab extends StatelessWidget {
 
         // Settings Sections
         _SettingsSection(
+          title: 'Workflow Settings',
+          items: [
+            _SettingsItem(
+              icon: Icons.person_search,
+              title: 'Primary Teacher',
+              subtitle: systemService.primaryTeacherName ?? 'Not selected',
+              onTap: () => _showPrimaryTeacherDialog(context),
+            ),
+            _SettingsItem(
+              icon: Icons.auto_awesome,
+              title: 'Auto-approval',
+              subtitle: systemService.autoApprovalEnabled ? 'Enabled' : 'Disabled',
+              onTap: () => _showAutoApprovalDialog(context),
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+
+        _SettingsSection(
           title: 'User Management',
           items: [
             _SettingsItem(
@@ -865,25 +872,11 @@ class _SystemSettingsTab extends StatelessWidget {
               subtitle: 'Configure user permissions and roles',
               onTap: () => onNavigate(1),
             ),
-            _SettingsItem(
-              icon: Icons.block,
-              title: 'User Suspension',
-              subtitle: 'Suspend or activate user accounts',
-              onTap: () => onNavigate(1),
-            ),
           ],
         ),
-        const SizedBox(height: 16),
-
         _SettingsSection(
-          title: 'Project Management',
+          title: 'Content Management',
           items: [
-            _SettingsItem(
-              icon: Icons.auto_awesome,
-              title: 'Auto-approval',
-              subtitle: 'Configure automatic project approval',
-              onTap: () => _showAutoApprovalDialog(context),
-            ),
             _SettingsItem(
               icon: Icons.star,
               title: 'Featured Projects',
@@ -939,6 +932,16 @@ class _SystemSettingsTab extends StatelessWidget {
         const SizedBox(height: 32),
       ],
     ),
+      ),
+    );
+  }
+
+  Future<void> _showPrimaryTeacherDialog(BuildContext context) async {
+    showDialog(
+      context: context,
+      builder: (context) => _PrimaryTeacherPickerDialog(
+        authService: authService,
+        systemService: systemService,
       ),
     );
   }
@@ -1843,7 +1846,7 @@ class _AdminProjectCard extends StatelessWidget {
               ),
               const SizedBox(height: 8),
               Text(
-                'By ${project.authorName} • ${project.category.displayName} • ${project.year}',
+                'By ${project.isGroupProject ? project.authorName : ((project.studentName != null && project.studentName!.isNotEmpty) ? project.studentName! : project.authorName)} • ${project.category.displayName} • ${project.year}',
                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                   color: Theme.of(context).colorScheme.onSurface.withOpacity(0.7),
                 ),
@@ -2983,6 +2986,177 @@ class _CreateEditAnnouncementDialogState extends State<_CreateEditAnnouncementDi
             }
           },
           child: const Text('Save'),
+        ),
+      ],
+    );
+  }
+}
+
+class _PrimaryTeacherPickerDialog extends StatefulWidget {
+  const _PrimaryTeacherPickerDialog({
+    required this.authService,
+    required this.systemService,
+  });
+
+  final AuthService authService;
+  final SystemService systemService;
+
+  @override
+  State<_PrimaryTeacherPickerDialog> createState() => _PrimaryTeacherPickerDialogState();
+}
+
+class _PrimaryTeacherPickerDialogState extends State<_PrimaryTeacherPickerDialog> {
+  List<User> _teachers = [];
+  List<User> _filteredTeachers = [];
+  bool _isLoading = true;
+  String _searchQuery = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTeachers();
+  }
+
+  Future<void> _loadTeachers() async {
+    setState(() => _isLoading = true);
+    try {
+      final teachers = await widget.authService.getUsersByRole(UserRole.teacher);
+      if (mounted) {
+        setState(() {
+          _teachers = teachers.where((t) => t.isApproved && t.isActive).toList();
+          _filteredTeachers = _teachers;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading teachers: $e');
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _filterTeachers(String query) {
+    setState(() {
+      _searchQuery = query;
+      _filteredTeachers = _teachers.where((t) => 
+        t.name.toLowerCase().contains(query.toLowerCase()) || 
+        t.email.toLowerCase().contains(query.toLowerCase())
+      ).toList();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Select Primary Teacher'),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              decoration: const InputDecoration(
+                hintText: 'Search teachers...',
+                prefixIcon: Icon(Icons.search),
+              ),
+              onChanged: _filterTeachers,
+            ),
+            const SizedBox(height: 16),
+            if (_isLoading)
+              const Center(child: CircularProgressIndicator())
+            else if (_filteredTeachers.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(20),
+                child: Text('No approved teachers found'),
+              )
+            else
+              Flexible(
+                child: ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: _filteredTeachers.length,
+                  itemBuilder: (context, index) {
+                    final teacher = _filteredTeachers[index];
+                    final isCurrent = teacher.id == widget.systemService.primaryTeacherId;
+                    return ListTile(
+                      title: Text(teacher.name),
+                      subtitle: Text(teacher.email),
+                      trailing: isCurrent ? const Icon(Icons.check_circle, color: Colors.green) : null,
+                      onTap: () async {
+                        await widget.systemService.updatePrimaryTeacher(teacher.id, teacher.name);
+                        if (mounted) Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+      ],
+    );
+  }
+}
+
+class _AdminMoreTab extends StatelessWidget {
+  const _AdminMoreTab({
+    required this.projectService,
+    required this.authService,
+    required this.systemService,
+    required this.onNavigate,
+  });
+  final ProjectService projectService;
+  final AuthService authService;
+  final SystemService systemService;
+  final void Function(int, {String? filter, String? query}) onNavigate;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListView(
+      padding: const EdgeInsets.all(16),
+      children: [
+        ListTile(
+          leading: const Icon(Icons.settings),
+          title: const Text('Settings'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => Scaffold(
+              appBar: AppBar(title: const Text('Settings')),
+              body: _SystemSettingsTab(
+                projectService: projectService, 
+                authService: authService,
+                systemService: systemService,
+                onNavigate: (index, {String? filter, String? query}) {
+                  Navigator.pop(context);
+                  onNavigate(index, filter: filter, query: query);
+                },
+              ),
+            )
+          )),
+        ),
+        const Divider(),
+        ListTile(
+          leading: const Icon(Icons.archive),
+          title: const Text('Archives'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => const SemesterArchiveScreen(),
+          )),
+        ),
+        const Divider(),
+        ListTile(
+          leading: const Icon(Icons.campaign),
+          title: const Text('Announcements'),
+          trailing: const Icon(Icons.chevron_right),
+          onTap: () => Navigator.push(context, MaterialPageRoute(
+            builder: (_) => Scaffold(
+              appBar: AppBar(title: const Text('Announcements')),
+              body: const _AnnouncementManagementTab(),
+            )
+          )),
         ),
       ],
     );
